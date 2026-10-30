@@ -4,7 +4,7 @@ import {
   LayoutDashboard, MapPin, FileText, BarChart3,
   Users, Settings, Bell, Plus, Search,
   AlertTriangle, CheckCircle2, Clock, Menu, Eye,
-  Check, CheckCheck, Trash2, X
+  Check, CheckCheck, Trash2, X, LogOut, Mail, LockKeyhole, UserRound
 } from 'lucide-react'
 
 import ReportProblem from './ReportProblem'
@@ -22,6 +22,76 @@ const problems = [
 ]
 
 function App() {
+  // Demo authentication is stored in this browser. Connect a backend for production security.
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('civiclens_session') || 'null')
+    } catch {
+      return null
+    }
+  })
+  const [authMode, setAuthMode] = useState('login')
+  const [authName, setAuthName] = useState('')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [authSuccess, setAuthSuccess] = useState('')
+  const [showAuthPassword, setShowAuthPassword] = useState(false)
+
+  const handleAuthSubmit = (event) => {
+    event.preventDefault()
+    setAuthError('')
+    setAuthSuccess('')
+    const email = authEmail.trim().toLowerCase()
+
+    if (!email || !authPassword) {
+      setAuthError('Please enter your email and password.')
+      return
+    }
+
+    if (authMode === 'signup') {
+      if (!authName.trim()) return setAuthError('Please enter your full name.')
+      if (authPassword.length < 6) return setAuthError('Password must contain at least 6 characters.')
+      if (authPassword !== authConfirmPassword) return setAuthError('Passwords do not match.')
+
+      const newUser = { name: authName.trim(), email, password: authPassword }
+      localStorage.setItem('civiclens_user', JSON.stringify(newUser))
+      setAuthMode('login')
+      setAuthPassword('')
+      setAuthConfirmPassword('')
+      setAuthSuccess('Account created successfully. Please log in.')
+      return
+    }
+
+    let savedUser = null
+    try {
+      savedUser = JSON.parse(localStorage.getItem('civiclens_user') || 'null')
+    } catch {
+      savedUser = null
+    }
+
+    if (!savedUser || savedUser.email !== email || savedUser.password !== authPassword) {
+      setAuthError('Invalid email or password. Please sign up first if you are a new user.')
+      return
+    }
+
+    const session = { name: savedUser.name, email: savedUser.email }
+    localStorage.setItem('civiclens_session', JSON.stringify(session))
+    setAuthUser(session)
+    setAuthPassword('')
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('civiclens_session')
+    setAuthUser(null)
+    setAuthMode('login')
+    setAuthEmail('')
+    setAuthPassword('')
+    setAuthError('')
+    setAuthSuccess('')
+  }
+
   const [active, setActive] = useState('Dashboard')
   const [showReport, setShowReport] = useState(false)
   const [search, setSearch] = useState('')
@@ -184,6 +254,92 @@ function App() {
     </div>
   )
 
+  if (!authUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute -top-28 -right-20 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl" />
+        <div className="absolute -bottom-32 -left-20 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl" />
+        <div className="relative w-full max-w-5xl min-h-[620px] bg-white rounded-3xl shadow-2xl overflow-hidden grid md:grid-cols-2">
+          <div className="hidden md:flex flex-col justify-between bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-900 text-white p-10">
+            <div>
+              <div className="flex items-center gap-3">
+                <div className="bg-cyan-500 p-3 rounded-2xl"><MapPin size={28} /></div>
+                <div><h1 className="text-3xl font-bold">CivicLens</h1><p className="text-sm text-slate-300">Community Intelligence</p></div>
+              </div>
+              <div className="mt-24">
+                <p className="text-cyan-300 text-sm font-semibold tracking-widest">YOUR CITY, YOUR VOICE</p>
+                <h2 className="text-4xl font-bold leading-tight mt-4">Make your community a better place.</h2>
+                <p className="text-slate-300 mt-5 leading-relaxed">Report local problems, track progress and work together to improve public spaces.</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">© 2026 CivicLens. Building better communities together.</p>
+          </div>
+
+          <div className="flex items-center justify-center p-7 sm:p-12">
+            <div className="w-full max-w-md">
+              <div className="md:hidden flex items-center gap-3 mb-10">
+                <div className="bg-cyan-500 text-white p-3 rounded-xl"><MapPin size={25} /></div>
+                <div><h1 className="text-2xl font-bold text-slate-900">CivicLens</h1><p className="text-xs text-slate-500">Community Intelligence</p></div>
+              </div>
+              <p className="text-sm font-semibold text-cyan-700">WELCOME TO CIVICLENS</p>
+              <h2 className="text-3xl font-bold text-slate-900 mt-2">{authMode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
+              <p className="text-slate-500 mt-2">{authMode === 'login' ? 'Log in to continue to your community dashboard.' : 'Join your community and help make a difference.'}</p>
+
+              <div className="grid grid-cols-2 bg-slate-100 rounded-xl p-1 mt-8 mb-6">
+                <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess('') }}
+                  className={`py-2.5 rounded-lg text-sm font-semibold ${authMode === 'login' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-500'}`}>Login</button>
+                <button type="button" onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthSuccess('') }}
+                  className={`py-2.5 rounded-lg text-sm font-semibold ${authMode === 'signup' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-500'}`}>Sign up</button>
+              </div>
+
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                {authMode === 'signup' && (
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Full name</span>
+                    <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
+                      <UserRound size={18} className="text-slate-400" />
+                      <input value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Enter your full name" className="w-full outline-none text-sm" autoComplete="name" />
+                    </div>
+                  </label>
+                )}
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Email address</span>
+                  <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
+                    <Mail size={18} className="text-slate-400" />
+                    <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@example.com" className="w-full outline-none text-sm" autoComplete="email" />
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Password</span>
+                  <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
+                    <LockKeyhole size={18} className="text-slate-400" />
+                    <input type={showAuthPassword ? 'text' : 'password'} value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="Enter your password" className="w-full outline-none text-sm" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} />
+                    <button type="button" onClick={() => setShowAuthPassword(!showAuthPassword)} className="text-xs font-semibold text-cyan-700">{showAuthPassword ? 'Hide' : 'Show'}</button>
+                  </div>
+                </label>
+                {authMode === 'signup' && (
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Confirm password</span>
+                    <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
+                      <LockKeyhole size={18} className="text-slate-400" />
+                      <input type={showAuthPassword ? 'text' : 'password'} value={authConfirmPassword} onChange={e => setAuthConfirmPassword(e.target.value)} placeholder="Re-enter your password" className="w-full outline-none text-sm" autoComplete="new-password" />
+                    </div>
+                  </label>
+                )}
+                {authError && <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{authError}</p>}
+                {authSuccess && <p role="status" className="text-sm text-green-700 bg-green-50 rounded-lg p-3">{authSuccess}</p>}
+                <button type="submit" className="w-full bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold py-3.5 rounded-xl transition shadow-lg shadow-cyan-500/20">
+                  {authMode === 'login' ? 'Login to CivicLens' : 'Create Account'}
+                </button>
+              </form>
+              <p className="text-xs text-slate-400 text-center mt-6">By continuing, you agree to use CivicLens respectfully and responsibly.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       <div className="flex min-h-screen">
@@ -213,8 +369,8 @@ function App() {
                   key={item.name}
                   onClick={() => openPage(item.name)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${active === item.name
-                      ? 'bg-cyan-500 text-white'
-                      : 'text-slate-400 hover:bg-slate-800'
+                    ? 'bg-cyan-500 text-white'
+                    : 'text-slate-400 hover:bg-slate-800'
                     }`}
                 >
                   <Icon size={19} />
@@ -389,15 +545,19 @@ function App() {
                 )}
               </div>
 
-              <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-xl border">
-                <div className="w-9 h-9 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold">
-                  K
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-xl border">
+                  <div className="w-9 h-9 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold">
+                    {(authUser.name || 'C').charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{authUser.name}</p>
+                    <p className="text-xs text-slate-500">Citizen</p>
+                  </div>
                 </div>
-
-                <div>
-                  <p className="text-sm font-semibold">Komal</p>
-                  <p className="text-xs text-slate-500">Citizen</p>
-                </div>
+                <button onClick={handleLogout} title="Logout" aria-label="Logout" className="p-3 bg-white rounded-xl border text-slate-600 hover:text-red-600 hover:bg-red-50 transition">
+                  <LogOut size={18} />
+                </button>
               </div>
             </div>
           </header>
