@@ -9,6 +9,7 @@ import {
 import ReportProblem from './ReportProblem'
 import MapView from './MapView'
 import Analytics from './Analytics'
+import Community from './Community'
 
 const problems = [
   { id: 1, title: 'Large pothole on main road', category: 'Road Damage', location: 'Sector 15, Chandigarh', severity: 'High', status: 'In Progress' },
@@ -148,8 +149,8 @@ function App() {
                   key={item.name}
                   onClick={() => openPage(item.name)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${active === item.name
-                      ? 'bg-cyan-500 text-white'
-                      : 'text-slate-400 hover:bg-slate-800'
+                    ? 'bg-cyan-500 text-white'
+                    : 'text-slate-400 hover:bg-slate-800'
                     }`}
                 >
                   <Icon size={19} />
@@ -218,6 +219,10 @@ function App() {
           ) : active === 'Analytics' ? (
 
             <Analytics />
+
+          ) : active === 'Community' ? (
+
+            <Community />
 
           ) : active === 'Problems' ? (
 
