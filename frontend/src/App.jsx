@@ -1,30 +1,28 @@
 
 import { useState } from 'react'
 import {
-  LayoutDashboard, MapPin, FileText, BarChart3, Users,
-  Settings, Search, Bell, Plus, AlertTriangle,
-  CheckCircle2, Clock, Menu, Filter, Eye, X
+  LayoutDashboard, MapPin, FileText, BarChart3,
+  Users, Settings, Bell, Plus, Search,
+  AlertTriangle, CheckCircle2, Clock, Menu, Eye
 } from 'lucide-react'
 
 import ReportProblem from './ReportProblem'
+import MapView from './MapView'
 
-const initialProblems = [
-  { id: 1, title: 'Large pothole on main road', category: 'Road Damage', location: 'Sector 15, Chandigarh', severity: 'High', status: 'In Progress', reports: 12, description: 'A large pothole is creating difficulties for vehicles and pedestrians.' },
-  { id: 2, title: 'Garbage overflowing', category: 'Garbage', location: 'Sector 22, Chandigarh', severity: 'Medium', status: 'Under Review', reports: 8, description: 'Garbage bins are overflowing and need immediate cleaning.' },
-  { id: 3, title: 'Streetlight not working', category: 'Streetlight', location: 'Sector 34, Chandigarh', severity: 'Low', status: 'Resolved', reports: 5, description: 'Streetlight near the residential area is not working.' },
-  { id: 4, title: 'Waterlogging near market', category: 'Waterlogging', location: 'Sector 17, Chandigarh', severity: 'High', status: 'Reported', reports: 16, description: 'Water accumulation is affecting traffic and pedestrians.' },
-  { id: 5, title: 'Damaged footpath', category: 'Footpath Damage', location: 'Sector 20, Chandigarh', severity: 'Medium', status: 'Reported', reports: 6, description: 'Broken footpath tiles are creating a safety hazard.' },
+const problems = [
+  { id: 1, title: 'Large pothole on main road', category: 'Road Damage', location: 'Sector 15, Chandigarh', severity: 'High', status: 'In Progress' },
+  { id: 2, title: 'Garbage overflowing', category: 'Garbage', location: 'Sector 22, Chandigarh', severity: 'Medium', status: 'Under Review' },
+  { id: 3, title: 'Streetlight not working', category: 'Streetlight', location: 'Sector 34, Chandigarh', severity: 'Low', status: 'Resolved' },
+  { id: 4, title: 'Waterlogging near market', category: 'Waterlogging', location: 'Sector 17, Chandigarh', severity: 'High', status: 'Reported' },
+  { id: 5, title: 'Damaged footpath', category: 'Footpath Damage', location: 'Sector 20, Chandigarh', severity: 'Medium', status: 'Reported' },
 ]
 
 function App() {
   const [active, setActive] = useState('Dashboard')
-  const [search, setSearch] = useState('')
-  const [menuOpen, setMenuOpen] = useState(false)
   const [showReport, setShowReport] = useState(false)
-  const [categoryFilter, setCategoryFilter] = useState('All')
-  const [severityFilter, setSeverityFilter] = useState('All')
-  const [statusFilter, setStatusFilter] = useState('All')
+  const [search, setSearch] = useState('')
   const [selectedProblem, setSelectedProblem] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard },
@@ -35,84 +33,67 @@ function App() {
     { name: 'Settings', icon: Settings },
   ]
 
-  const filteredProblems = initialProblems.filter(problem => {
-    const matchesSearch =
-      `${problem.title} ${problem.category} ${problem.location}`
-        .toLowerCase()
-        .includes(search.toLowerCase())
+  const filteredProblems = problems.filter(p =>
+    `${p.title} ${p.category} ${p.location}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
+  )
 
-    const matchesCategory =
-      categoryFilter === 'All' || problem.category === categoryFilter
-
-    const matchesSeverity =
-      severityFilter === 'All' || problem.severity === severityFilter
-
-    const matchesStatus =
-      statusFilter === 'All' || problem.status === statusFilter
-
-    return matchesSearch && matchesCategory && matchesSeverity && matchesStatus
-  })
-
-  const severityStyle = {
+  const severityColors = {
     High: 'bg-red-50 text-red-600',
     Medium: 'bg-orange-50 text-orange-600',
     Low: 'bg-green-50 text-green-600',
   }
 
-  const statusStyle = {
+  const statusColors = {
     Reported: 'bg-blue-50 text-blue-600',
     'In Progress': 'bg-purple-50 text-purple-600',
     'Under Review': 'bg-orange-50 text-orange-600',
     Resolved: 'bg-green-50 text-green-600',
   }
 
-  const handleNavigation = (name) => {
+  const openPage = (name) => {
     setActive(name)
     setShowReport(false)
     setSelectedProblem(null)
-    setMenuOpen(false)
     setSearch('')
-    setCategoryFilter('All')
-    setSeverityFilter('All')
-    setStatusFilter('All')
+    setMenuOpen(false)
   }
 
-  const ProblemsTable = ({ data }) => (
+  const ProblemTable = ({ data }) => (
     <div className="overflow-x-auto">
-      <table className="w-full text-left min-w-[750px]">
+      <table className="w-full text-left min-w-[650px]">
         <thead>
-          <tr className="text-xs text-slate-500 border-b border-slate-100">
+          <tr className="text-xs text-slate-500 border-b">
             <th className="py-4">PROBLEM</th>
             <th className="py-4">LOCATION</th>
             <th className="py-4">SEVERITY</th>
             <th className="py-4">STATUS</th>
-            <th className="py-4">SUPPORTS</th>
             <th className="py-4">ACTION</th>
           </tr>
         </thead>
         <tbody>
-          {data.map(problem => (
-            <tr key={problem.id} className="border-b border-slate-50 hover:bg-slate-50">
+          {data.map(p => (
+            <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
               <td className="py-4 pr-3">
-                <p className="font-semibold text-sm">{problem.title}</p>
-                <p className="text-xs text-slate-400 mt-1">{problem.category}</p>
+                <p className="font-semibold text-sm">{p.title}</p>
+                <p className="text-xs text-slate-400">{p.category}</p>
               </td>
-              <td className="py-4 text-sm text-slate-500">{problem.location}</td>
+              <td className="py-4 text-sm text-slate-500">{p.location}</td>
               <td className="py-4">
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${severityStyle[problem.severity]}`}>
-                  {problem.severity}
+                <span className={`px-3 py-1 rounded-full text-xs ${severityColors[p.severity]}`}>
+                  {p.severity}
                 </span>
               </td>
               <td className="py-4">
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusStyle[problem.status]}`}>
-                  {problem.status}
+                <span className={`px-3 py-1 rounded-full text-xs ${statusColors[p.status]}`}>
+                  {p.status}
                 </span>
               </td>
-              <td className="py-4 text-sm">{problem.reports}</td>
               <td className="py-4">
                 <button
-                  onClick={() => setSelectedProblem(problem)}
-                  className="flex items-center gap-1 text-cyan-700 text-sm font-semibold hover:text-cyan-900"
+                  onClick={() => setSelectedProblem(p)}
+                  className="text-cyan-700 flex items-center gap-1 text-sm font-semibold"
                 >
                   <Eye size={16} /> View
                 </button>
@@ -121,8 +102,8 @@ function App() {
           ))}
           {data.length === 0 && (
             <tr>
-              <td colSpan="6" className="py-12 text-center text-slate-400">
-                No problems found. Try changing your filters.
+              <td colSpan="5" className="text-center py-10 text-slate-400">
+                No problems found.
               </td>
             </tr>
           )}
@@ -156,10 +137,10 @@ function App() {
               return (
                 <button
                   key={item.name}
-                  onClick={() => handleNavigation(item.name)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition ${active === item.name
+                  onClick={() => openPage(item.name)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${active === item.name
                       ? 'bg-cyan-500 text-white'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                      : 'text-slate-400 hover:bg-slate-800'
                     }`}
                 >
                   <Icon size={19} />
@@ -195,10 +176,10 @@ function App() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button className="p-3 bg-white rounded-xl border border-slate-200">
+              <button className="p-3 bg-white rounded-xl border">
                 <Bell size={19} />
               </button>
-              <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-xl border">
                 <div className="w-9 h-9 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold">
                   K
                 </div>
@@ -212,149 +193,42 @@ function App() {
 
           {showReport ? (
             <ReportProblem onBack={() => setShowReport(false)} />
+          ) : active === 'Map View' ? (
+
+            <MapView />
+
           ) : active === 'Problems' ? (
 
             <div className="space-y-6">
               <section className="bg-gradient-to-r from-slate-900 to-cyan-900 text-white rounded-3xl p-7">
-                <p className="text-cyan-300 text-sm font-medium">COMMUNITY ISSUES</p>
+                <p className="text-cyan-300 text-sm font-semibold">COMMUNITY ISSUES</p>
                 <h2 className="text-3xl font-bold mt-3">Reported Problems</h2>
                 <p className="text-slate-300 mt-2">
                   Explore and track infrastructure problems in your community.
                 </p>
                 <button
                   onClick={() => setShowReport(true)}
-                  className="mt-5 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold px-5 py-3 rounded-xl flex items-center gap-2"
+                  className="mt-5 bg-cyan-400 text-slate-950 font-semibold px-5 py-3 rounded-xl flex items-center gap-2"
                 >
                   <Plus size={18} /> Report New Problem
                 </button>
               </section>
 
-              <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white rounded-2xl p-5 border border-slate-100">
-                  <p className="text-sm text-slate-500">Total Problems</p>
-                  <h3 className="text-3xl font-bold mt-2">{initialProblems.length}</h3>
+              <section className="bg-white rounded-2xl p-5 border">
+                <div className="flex items-center gap-2 border rounded-xl px-3 py-3 mb-5 max-w-md">
+                  <Search size={18} className="text-slate-400" />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search problems..."
+                    className="outline-none w-full text-sm"
+                  />
                 </div>
-                <div className="bg-white rounded-2xl p-5 border border-slate-100">
-                  <p className="text-sm text-slate-500">High Severity</p>
-                  <h3 className="text-3xl font-bold mt-2 text-red-600">
-                    {initialProblems.filter(p => p.severity === 'High').length}
-                  </h3>
-                </div>
-                <div className="bg-white rounded-2xl p-5 border border-slate-100">
-                  <p className="text-sm text-slate-500">Resolved</p>
-                  <h3 className="text-3xl font-bold mt-2 text-green-600">
-                    {initialProblems.filter(p => p.status === 'Resolved').length}
-                  </h3>
-                </div>
+                <p className="text-sm text-slate-500 mb-4">
+                  Showing {filteredProblems.length} of {problems.length} problems
+                </p>
+                <ProblemTable data={filteredProblems} />
               </section>
-
-              <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <div className="flex items-center gap-2 mb-5">
-                  <Filter size={19} className="text-cyan-600" />
-                  <h3 className="font-bold text-lg">Search and Filter Problems</h3>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                  <div className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-3">
-                    <Search size={18} className="text-slate-400" />
-                    <input
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      placeholder="Search problems..."
-                      className="outline-none w-full text-sm"
-                    />
-                  </div>
-
-                  <select
-                    value={categoryFilter}
-                    onChange={e => setCategoryFilter(e.target.value)}
-                    className="border border-slate-200 rounded-xl px-3 py-3 text-sm bg-white"
-                  >
-                    <option value="All">All Categories</option>
-                    <option value="Road Damage">Road Damage</option>
-                    <option value="Garbage">Garbage</option>
-                    <option value="Streetlight">Streetlight</option>
-                    <option value="Waterlogging">Waterlogging</option>
-                    <option value="Footpath Damage">Footpath Damage</option>
-                  </select>
-
-                  <select
-                    value={severityFilter}
-                    onChange={e => setSeverityFilter(e.target.value)}
-                    className="border border-slate-200 rounded-xl px-3 py-3 text-sm bg-white"
-                  >
-                    <option value="All">All Severities</option>
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
-
-                  <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                    className="border border-slate-200 rounded-xl px-3 py-3 text-sm bg-white"
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Reported">Reported</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Under Review">Under Review</option>
-                    <option value="Resolved">Resolved</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 mt-5">
-                  <p className="text-sm text-slate-500">
-                    Showing <strong>{filteredProblems.length}</strong> of {initialProblems.length} problems
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSearch('')
-                      setCategoryFilter('All')
-                      setSeverityFilter('All')
-                      setStatusFilter('All')
-                    }}
-                    className="text-sm text-cyan-700 font-semibold hover:underline"
-                  >
-                    Clear Filters
-                  </button>
-                </div>
-              </section>
-
-              <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <h3 className="text-lg font-bold mb-4">All Community Problems</h3>
-                <ProblemsTable data={filteredProblems} />
-              </section>
-
-              {selectedProblem && (
-                <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4">
-                  <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl">
-                    <div className="flex items-center justify-between mb-5">
-                      <h3 className="text-xl font-bold">Problem Details</h3>
-                      <button onClick={() => setSelectedProblem(null)}>
-                        <X />
-                      </button>
-                    </div>
-
-                    <h4 className="text-lg font-semibold">{selectedProblem.title}</h4>
-                    <p className="text-sm text-slate-500 mt-2">{selectedProblem.description}</p>
-
-                    <div className="space-y-3 mt-6 text-sm">
-                      <p><strong>Category:</strong> {selectedProblem.category}</p>
-                      <p><strong>Location:</strong> {selectedProblem.location}</p>
-                      <p><strong>Severity:</strong> {selectedProblem.severity}</p>
-                      <p><strong>Status:</strong> {selectedProblem.status}</p>
-                      <p><strong>Community supports:</strong> {selectedProblem.reports}</p>
-                    </div>
-
-                    <button
-                      onClick={() => setSelectedProblem(null)}
-                      className="w-full mt-6 bg-cyan-600 text-white rounded-xl py-3 font-semibold hover:bg-cyan-700"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
 
           ) : active === 'Dashboard' ? (
@@ -376,14 +250,14 @@ function App() {
 
               <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
                 {[
-                  { title: 'Total Reports', value: '156', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', change: 'Community submissions' },
-                  { title: 'Active Problems', value: '42', icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50', change: 'Need attention' },
-                  { title: 'Resolved Issues', value: '89', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50', change: 'Successfully fixed' },
-                  { title: 'Under Review', value: '25', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50', change: 'Being reviewed' },
+                  { title: 'Total Reports', value: '156', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { title: 'Active Problems', value: '42', icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50' },
+                  { title: 'Resolved Issues', value: '89', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
+                  { title: 'Under Review', value: '25', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50' },
                 ].map(stat => {
                   const Icon = stat.icon
                   return (
-                    <div key={stat.title} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                    <div key={stat.title} className="bg-white rounded-2xl p-5 border shadow-sm">
                       <div className="flex justify-between items-center">
                         <p className="text-sm text-slate-500">{stat.title}</p>
                         <div className={`${stat.bg} ${stat.color} p-3 rounded-xl`}>
@@ -391,29 +265,25 @@ function App() {
                         </div>
                       </div>
                       <h3 className="text-3xl font-bold mt-4">{stat.value}</h3>
-                      <p className="text-xs text-slate-400 mt-2">{stat.change}</p>
                     </div>
                   )
                 })}
               </section>
 
-              <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+              <section className="bg-white rounded-2xl border shadow-sm p-5">
+                <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
                   <div>
                     <h3 className="text-lg font-bold">Recent Community Problems</h3>
                     <p className="text-sm text-slate-500 mt-1">Latest reported infrastructure issues</p>
                   </div>
-                  <div className="flex gap-2 items-center border border-slate-200 rounded-xl px-3 py-2">
-                    <Search size={17} className="text-slate-400" />
-                    <input
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      placeholder="Search problems..."
-                      className="outline-none text-sm w-36"
-                    />
-                  </div>
+                  <button
+                    onClick={() => openPage('Problems')}
+                    className="text-cyan-700 font-semibold text-sm"
+                  >
+                    View All
+                  </button>
                 </div>
-                <ProblemsTable data={filteredProblems} />
+                <ProblemTable data={problems.slice(0, 3)} />
               </section>
 
               <footer className="text-center text-xs text-slate-400 mt-8">
@@ -422,7 +292,7 @@ function App() {
             </>
 
           ) : (
-            <section className="bg-white rounded-2xl border border-slate-100 p-10 text-center">
+            <section className="bg-white rounded-2xl border p-10 text-center">
               <div className="bg-cyan-50 text-cyan-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto">
                 <Settings size={30} />
               </div>
@@ -431,12 +301,34 @@ function App() {
                 This section is planned for the next development phase.
               </p>
               <button
-                onClick={() => handleNavigation('Dashboard')}
+                onClick={() => openPage('Dashboard')}
                 className="mt-5 bg-cyan-600 text-white px-5 py-3 rounded-xl"
               >
                 Back to Dashboard
               </button>
             </section>
+          )}
+
+          {selectedProblem && (
+            <div className="fixed inset-0 z-[1000] bg-slate-950/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
+                <div className="flex justify-between items-center mb-5">
+                  <h3 className="text-xl font-bold">Problem Details</h3>
+                  <button onClick={() => setSelectedProblem(null)}>✕</button>
+                </div>
+                <h4 className="font-semibold">{selectedProblem.title}</h4>
+                <p className="text-sm text-slate-500 mt-2">{selectedProblem.location}</p>
+                <p className="text-sm mt-3">Category: {selectedProblem.category}</p>
+                <p className="text-sm mt-2">Severity: {selectedProblem.severity}</p>
+                <p className="text-sm mt-2">Status: {selectedProblem.status}</p>
+                <button
+                  onClick={() => setSelectedProblem(null)}
+                  className="mt-6 w-full bg-cyan-600 text-white py-3 rounded-xl"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           )}
 
         </main>
