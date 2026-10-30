@@ -8,6 +8,7 @@ import {
 
 import ReportProblem from './ReportProblem'
 import MapView from './MapView'
+import Analytics from './Analytics'
 
 const problems = [
   { id: 1, title: 'Large pothole on main road', category: 'Road Damage', location: 'Sector 15, Chandigarh', severity: 'High', status: 'In Progress' },
@@ -72,6 +73,7 @@ function App() {
             <th className="py-4">ACTION</th>
           </tr>
         </thead>
+
         <tbody>
           {data.map(p => (
             <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -79,17 +81,21 @@ function App() {
                 <p className="font-semibold text-sm">{p.title}</p>
                 <p className="text-xs text-slate-400">{p.category}</p>
               </td>
+
               <td className="py-4 text-sm text-slate-500">{p.location}</td>
+
               <td className="py-4">
                 <span className={`px-3 py-1 rounded-full text-xs ${severityColors[p.severity]}`}>
                   {p.severity}
                 </span>
               </td>
+
               <td className="py-4">
                 <span className={`px-3 py-1 rounded-full text-xs ${statusColors[p.status]}`}>
                   {p.status}
                 </span>
               </td>
+
               <td className="py-4">
                 <button
                   onClick={() => setSelectedProblem(p)}
@@ -100,6 +106,7 @@ function App() {
               </td>
             </tr>
           ))}
+
           {data.length === 0 && (
             <tr>
               <td colSpan="5" className="text-center py-10 text-slate-400">
@@ -121,6 +128,7 @@ function App() {
             <div className="bg-cyan-500 p-2 rounded-xl">
               <MapPin size={25} />
             </div>
+
             <div>
               <h1 className="text-2xl font-bold">CivicLens</h1>
               <p className="text-xs text-slate-400">Community Intelligence</p>
@@ -134,6 +142,7 @@ function App() {
           <nav className="space-y-2">
             {navigation.map(item => {
               const Icon = item.icon
+
               return (
                 <button
                   key={item.name}
@@ -162,13 +171,18 @@ function App() {
 
           <header className="flex flex-wrap items-center justify-between gap-4 mb-9">
             <div className="flex items-center gap-3">
-              <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)}>
+              <button
+                className="md:hidden"
+                onClick={() => setMenuOpen(!menuOpen)}
+              >
                 <Menu />
               </button>
+
               <div>
                 <p className="text-sm text-slate-500">
                   Community / {showReport ? 'Report Problem' : active}
                 </p>
+
                 <h2 className="text-2xl font-bold mt-1">
                   {showReport ? 'Report a Problem' : active}
                 </h2>
@@ -179,10 +193,12 @@ function App() {
               <button className="p-3 bg-white rounded-xl border">
                 <Bell size={19} />
               </button>
+
               <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-xl border">
                 <div className="w-9 h-9 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold">
                   K
                 </div>
+
                 <div>
                   <p className="text-sm font-semibold">Komal</p>
                   <p className="text-xs text-slate-500">Citizen</p>
@@ -192,20 +208,33 @@ function App() {
           </header>
 
           {showReport ? (
+
             <ReportProblem onBack={() => setShowReport(false)} />
+
           ) : active === 'Map View' ? (
 
             <MapView />
+
+          ) : active === 'Analytics' ? (
+
+            <Analytics />
 
           ) : active === 'Problems' ? (
 
             <div className="space-y-6">
               <section className="bg-gradient-to-r from-slate-900 to-cyan-900 text-white rounded-3xl p-7">
-                <p className="text-cyan-300 text-sm font-semibold">COMMUNITY ISSUES</p>
-                <h2 className="text-3xl font-bold mt-3">Reported Problems</h2>
+                <p className="text-cyan-300 text-sm font-semibold">
+                  COMMUNITY ISSUES
+                </p>
+
+                <h2 className="text-3xl font-bold mt-3">
+                  Reported Problems
+                </h2>
+
                 <p className="text-slate-300 mt-2">
                   Explore and track infrastructure problems in your community.
                 </p>
+
                 <button
                   onClick={() => setShowReport(true)}
                   className="mt-5 bg-cyan-400 text-slate-950 font-semibold px-5 py-3 rounded-xl flex items-center gap-2"
@@ -217,6 +246,7 @@ function App() {
               <section className="bg-white rounded-2xl p-5 border">
                 <div className="flex items-center gap-2 border rounded-xl px-3 py-3 mb-5 max-w-md">
                   <Search size={18} className="text-slate-400" />
+
                   <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
@@ -224,9 +254,11 @@ function App() {
                     className="outline-none w-full text-sm"
                   />
                 </div>
+
                 <p className="text-sm text-slate-500 mb-4">
                   Showing {filteredProblems.length} of {problems.length} problems
                 </p>
+
                 <ProblemTable data={filteredProblems} />
               </section>
             </div>
@@ -235,11 +267,18 @@ function App() {
 
             <>
               <section className="bg-gradient-to-r from-slate-900 to-cyan-900 text-white rounded-3xl p-7 md:p-9 mb-8">
-                <p className="text-cyan-300 text-sm font-medium">CIVICLENS COMMUNITY PORTAL</p>
-                <h2 className="text-3xl font-bold mt-3">Your City, Your Voice.</h2>
+                <p className="text-cyan-300 text-sm font-medium">
+                  CIVICLENS COMMUNITY PORTAL
+                </p>
+
+                <h2 className="text-3xl font-bold mt-3">
+                  Your City, Your Voice.
+                </h2>
+
                 <p className="text-slate-300 mt-3 max-w-xl">
                   Report local problems, support your community and help make public spaces better for everyone.
                 </p>
+
                 <button
                   onClick={() => setShowReport(true)}
                   className="mt-6 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold px-5 py-3 rounded-xl flex items-center gap-2"
@@ -256,15 +295,20 @@ function App() {
                   { title: 'Under Review', value: '25', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50' },
                 ].map(stat => {
                   const Icon = stat.icon
+
                   return (
                     <div key={stat.title} className="bg-white rounded-2xl p-5 border shadow-sm">
                       <div className="flex justify-between items-center">
                         <p className="text-sm text-slate-500">{stat.title}</p>
+
                         <div className={`${stat.bg} ${stat.color} p-3 rounded-xl`}>
                           <Icon size={20} />
                         </div>
                       </div>
-                      <h3 className="text-3xl font-bold mt-4">{stat.value}</h3>
+
+                      <h3 className="text-3xl font-bold mt-4">
+                        {stat.value}
+                      </h3>
                     </div>
                   )
                 })}
@@ -273,9 +317,15 @@ function App() {
               <section className="bg-white rounded-2xl border shadow-sm p-5">
                 <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
                   <div>
-                    <h3 className="text-lg font-bold">Recent Community Problems</h3>
-                    <p className="text-sm text-slate-500 mt-1">Latest reported infrastructure issues</p>
+                    <h3 className="text-lg font-bold">
+                      Recent Community Problems
+                    </h3>
+
+                    <p className="text-sm text-slate-500 mt-1">
+                      Latest reported infrastructure issues
+                    </p>
                   </div>
+
                   <button
                     onClick={() => openPage('Problems')}
                     className="text-cyan-700 font-semibold text-sm"
@@ -283,6 +333,7 @@ function App() {
                     View All
                   </button>
                 </div>
+
                 <ProblemTable data={problems.slice(0, 3)} />
               </section>
 
@@ -292,14 +343,18 @@ function App() {
             </>
 
           ) : (
+
             <section className="bg-white rounded-2xl border p-10 text-center">
               <div className="bg-cyan-50 text-cyan-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto">
                 <Settings size={30} />
               </div>
+
               <h3 className="text-xl font-bold mt-5">{active}</h3>
+
               <p className="text-slate-500 mt-2">
                 This section is planned for the next development phase.
               </p>
+
               <button
                 onClick={() => openPage('Dashboard')}
                 className="mt-5 bg-cyan-600 text-white px-5 py-3 rounded-xl"
@@ -314,13 +369,32 @@ function App() {
               <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
                 <div className="flex justify-between items-center mb-5">
                   <h3 className="text-xl font-bold">Problem Details</h3>
-                  <button onClick={() => setSelectedProblem(null)}>✕</button>
+
+                  <button onClick={() => setSelectedProblem(null)}>
+                    ✕
+                  </button>
                 </div>
-                <h4 className="font-semibold">{selectedProblem.title}</h4>
-                <p className="text-sm text-slate-500 mt-2">{selectedProblem.location}</p>
-                <p className="text-sm mt-3">Category: {selectedProblem.category}</p>
-                <p className="text-sm mt-2">Severity: {selectedProblem.severity}</p>
-                <p className="text-sm mt-2">Status: {selectedProblem.status}</p>
+
+                <h4 className="font-semibold">
+                  {selectedProblem.title}
+                </h4>
+
+                <p className="text-sm text-slate-500 mt-2">
+                  {selectedProblem.location}
+                </p>
+
+                <p className="text-sm mt-3">
+                  Category: {selectedProblem.category}
+                </p>
+
+                <p className="text-sm mt-2">
+                  Severity: {selectedProblem.severity}
+                </p>
+
+                <p className="text-sm mt-2">
+                  Status: {selectedProblem.status}
+                </p>
+
                 <button
                   onClick={() => setSelectedProblem(null)}
                   className="mt-6 w-full bg-cyan-600 text-white py-3 rounded-xl"
