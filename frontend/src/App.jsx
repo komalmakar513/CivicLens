@@ -3,7 +3,8 @@ import { useState } from 'react'
 import {
   LayoutDashboard, MapPin, FileText, BarChart3,
   Users, Settings, Bell, Plus, Search,
-  AlertTriangle, CheckCircle2, Clock, Menu, Eye
+  AlertTriangle, CheckCircle2, Clock, Menu, Eye,
+  Check, CheckCheck, Trash2, X
 } from 'lucide-react'
 
 import ReportProblem from './ReportProblem'
@@ -26,6 +27,44 @@ function App() {
   const [search, setSearch] = useState('')
   const [selectedProblem, setSelectedProblem] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+
+  const [notifications, setNotifications] = useState([
+    {
+      id: 1,
+      title: 'New Problem Reported',
+      message: 'A pothole has been reported in Sector 15, Chandigarh.',
+      time: '5 minutes ago',
+      type: 'problem',
+      read: false,
+    },
+    {
+      id: 2,
+      title: 'Problem Status Updated',
+      message: 'Garbage overflowing in Sector 22 is now under review.',
+      time: '1 hour ago',
+      type: 'update',
+      read: false,
+    },
+    {
+      id: 3,
+      title: 'Issue Resolved',
+      message: 'Streetlight problem in Sector 34 has been resolved.',
+      time: '3 hours ago',
+      type: 'resolved',
+      read: false,
+    },
+    {
+      id: 4,
+      title: 'Community Update',
+      message: 'Your community has received new support votes.',
+      time: 'Yesterday',
+      type: 'community',
+      read: true,
+    },
+  ])
+
+  const unreadCount = notifications.filter(n => !n.read).length
 
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard },
@@ -55,12 +94,36 @@ function App() {
     Resolved: 'bg-green-50 text-green-600',
   }
 
+  const notificationIcon = {
+    problem: AlertTriangle,
+    update: Clock,
+    resolved: CheckCircle2,
+    community: Users,
+  }
+
+  const markAsRead = (id) => {
+    setNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, read: true } : n)
+    )
+  }
+
+  const markAllAsRead = () => {
+    setNotifications(prev =>
+      prev.map(n => ({ ...n, read: true }))
+    )
+  }
+
+  const clearAllNotifications = () => {
+    setNotifications([])
+  }
+
   const openPage = (name) => {
     setActive(name)
     setShowReport(false)
     setSelectedProblem(null)
     setSearch('')
     setMenuOpen(false)
+    setShowNotifications(false)
   }
 
   const ProblemTable = ({ data }) => (
@@ -192,9 +255,139 @@ function App() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button className="p-3 bg-white rounded-xl border">
-                <Bell size={19} />
-              </button>
+
+              {/* Notification Center */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-3 bg-white rounded-xl border hover:bg-slate-50 transition"
+                  aria-label="Notifications"
+                >
+                  <Bell size={19} />
+
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs min-w-5 h-5 px-1 rounded-full flex items-center justify-center font-bold">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 top-14 z-[100] w-[min(370px,calc(100vw-35px))] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
+
+                    <div className="p-4 border-b flex items-center justify-between">
+                      <div>
+                        <h3 className="font-bold text-lg">Notifications</h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {unreadCount} unread notifications
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => setShowNotifications(false)}
+                        className="p-2 hover:bg-slate-100 rounded-lg"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <div className="p-3 flex justify-between gap-2 border-b">
+                      <button
+                        onClick={markAllAsRead}
+                        disabled={unreadCount === 0}
+                        className="text-xs text-cyan-700 font-semibold flex items-center gap-1 disabled:opacity-40"
+                      >
+                        <CheckCheck size={15} />
+                        Mark all as read
+                      </button>
+
+                      <button
+                        onClick={clearAllNotifications}
+                        disabled={notifications.length === 0}
+                        className="text-xs text-red-500 font-semibold flex items-center gap-1 disabled:opacity-40"
+                      >
+                        <Trash2 size={14} />
+                        Clear all
+                      </button>
+                    </div>
+
+                    <div className="max-h-[380px] overflow-y-auto">
+                      {notifications.length > 0 ? (
+
+                        notifications.map(n => {
+                          const Icon = notificationIcon[n.type]
+
+                          return (
+                            <div
+                              key={n.id}
+                              className={`p-4 border-b border-slate-100 hover:bg-slate-50 ${!n.read ? 'bg-cyan-50/60' : ''
+                                }`}
+                            >
+                              <div className="flex gap-3">
+                                <div className="w-10 h-10 shrink-0 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center">
+                                  <Icon size={19} />
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-sm font-bold">
+                                      {n.title}
+                                    </p>
+
+                                    {!n.read && (
+                                      <span className="w-2 h-2 rounded-full bg-cyan-500 mt-1 shrink-0" />
+                                    )}
+                                  </div>
+
+                                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                    {n.message}
+                                  </p>
+
+                                  <div className="flex justify-between items-center mt-3">
+                                    <span className="text-[11px] text-slate-400">
+                                      {n.time}
+                                    </span>
+
+                                    {!n.read && (
+                                      <button
+                                        onClick={() => markAsRead(n.id)}
+                                        className="text-xs text-cyan-700 font-semibold flex items-center gap-1"
+                                      >
+                                        <Check size={13} />
+                                        Mark read
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+
+                      ) : (
+
+                        <div className="py-12 text-center">
+                          <Bell size={35} className="mx-auto text-slate-300" />
+                          <p className="font-semibold text-slate-600 mt-3">
+                            All caught up!
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            No notifications available.
+                          </p>
+                        </div>
+
+                      )}
+                    </div>
+
+                    <div className="p-3 bg-slate-50 text-center">
+                      <p className="text-xs text-slate-400">
+                        CivicLens Community Notifications
+                      </p>
+                    </div>
+
+                  </div>
+                )}
+              </div>
 
               <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-xl border">
                 <div className="w-9 h-9 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold">
