@@ -1,3 +1,4 @@
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
@@ -16,10 +17,17 @@ const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    if (!name || !email || !password) {
+    if (
+      typeof name !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Please provide name, email and password",
+        message: "Please provide valid name, email and password",
       });
     }
 
@@ -30,8 +38,10 @@ const registerUser = async (req, res) => {
       });
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+
     const existingUser = await User.findOne({
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
     });
 
     if (existingUser) {
@@ -44,8 +54,8 @@ const registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 12);
 
     const user = await User.create({
-      name,
-      email,
+      name: name.trim(),
+      email: normalizedEmail,
       password: hashedPassword,
     });
 
@@ -65,6 +75,13 @@ const registerUser = async (req, res) => {
   } catch (error) {
     console.error("Registration error:", error);
 
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "Email already registered",
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Registration failed",
@@ -77,10 +94,15 @@ const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !email.trim() ||
+      !password
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Please provide email and password",
+        message: "Please provide valid email and password",
       });
     }
 
@@ -127,7 +149,30 @@ const loginUser = async (req, res) => {
   }
 };
 
+// GET LOGGED-IN USER PROFILE
+const getMe = async (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      user: {
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Get profile error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch user profile",
+    });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
+  getMe,
 };
