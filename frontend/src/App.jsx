@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   LayoutDashboard, MapPin, FileText, BarChart3,
   Users, Settings, Bell, Plus, Search,
@@ -16,7 +17,10 @@ import SettingsPage from './Settings'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 function App() {
-  // Authentication state
+  // =========================
+  // AUTHENTICATION
+  // =========================
+
   const [authUser, setAuthUser] = useState(() => {
     try {
       const token = localStorage.getItem('civiclens_session')
@@ -32,17 +36,71 @@ function App() {
     }
   })
 
-  // Backend problems state
+  const [authMode, setAuthMode] = useState('login')
+  const [authName, setAuthName] = useState('')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [authSuccess, setAuthSuccess] = useState('')
+  const [showAuthPassword, setShowAuthPassword] = useState(false)
+  const [authLoading, setAuthLoading] = useState(false)
+
+  // =========================
+  // PROBLEMS STATE
+  // =========================
+
   const [problems, setProblems] = useState([])
   const [problemsLoading, setProblemsLoading] = useState(false)
   const [problemsError, setProblemsError] = useState('')
 
-  // Dashboard analytics state
+  // =========================
+  // ANALYTICS STATE
+  // =========================
+
   const [dashboardAnalytics, setDashboardAnalytics] = useState(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsError, setAnalyticsError] = useState('')
 
-  // Fetch problems from MongoDB through the backend
+  // =========================
+  // DASHBOARD UI STATE
+  // =========================
+
+  const [active, setActive] = useState('Dashboard')
+  const [showReport, setShowReport] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedProblem, setSelectedProblem] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+
+  // =========================
+  // NOTIFICATION PREFERENCES
+  // =========================
+
+  const [readNotifications, setReadNotifications] = useState(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem('civiclens_read_notifications') || '[]'
+      )
+    } catch {
+      return []
+    }
+  })
+
+  const [dismissedNotifications, setDismissedNotifications] = useState(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem('civiclens_dismissed_notifications') || '[]'
+      )
+    } catch {
+      return []
+    }
+  })
+
+  // =========================
+  // FETCH PROBLEMS FROM MONGODB
+  // =========================
+
   const fetchProblems = useCallback(async () => {
     const token = localStorage.getItem('civiclens_session')
 
@@ -68,7 +126,7 @@ function App() {
         throw new Error(data.message || 'Could not load problems.')
       }
 
-      setProblems(data.problems || [])
+      setProblems(Array.isArray(data.problems) ? data.problems : [])
     } catch (error) {
       console.error('Fetch problems error:', error)
       setProblemsError(error.message || 'Something went wrong.')
@@ -77,7 +135,10 @@ function App() {
     }
   }, [])
 
-  // Fetch live dashboard analytics from MongoDB
+  // =========================
+  // FETCH DASHBOARD ANALYTICS
+  // =========================
+
   const fetchDashboardAnalytics = useCallback(async () => {
     const token = localStorage.getItem('civiclens_session')
 
@@ -101,25 +162,22 @@ function App() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        throw new Error(
-          data.message || 'Could not load dashboard analytics.'
-        )
+        throw new Error(data.message || 'Could not load dashboard analytics.')
       }
-
-      console.log('Live dashboard analytics:', data.analytics)
 
       setDashboardAnalytics(data.analytics)
     } catch (error) {
       console.error('Dashboard analytics error:', error)
-      setAnalyticsError(
-        error.message || 'Something went wrong while loading analytics.'
-      )
+      setAnalyticsError(error.message || 'Something went wrong.')
     } finally {
       setAnalyticsLoading(false)
     }
   }, [])
 
-  // Fetch data after login or when the app opens with an existing session
+  // =========================
+  // INITIAL DATA FETCH
+  // =========================
+
   useEffect(() => {
     if (authUser) {
       fetchProblems()
@@ -127,18 +185,133 @@ function App() {
     }
   }, [authUser, fetchProblems, fetchDashboardAnalytics])
 
-  // Authentication form state
-  const [authMode, setAuthMode] = useState('login')
-  const [authName, setAuthName] = useState('')
-  const [authEmail, setAuthEmail] = useState('')
-  const [authPassword, setAuthPassword] = useState('')
-  const [authConfirmPassword, setAuthConfirmPassword] = useState('')
-  const [authError, setAuthError] = useState('')
-  const [authSuccess, setAuthSuccess] = useState('')
-  const [showAuthPassword, setShowAuthPassword] = useState(false)
-  const [authLoading, setAuthLoading] = useState(false)
+  // =========================
+  // AUTOMATIC REPORT REFRESH
+  // =========================
 
-  // Backend signup and login
+  useEffect(() => {
+    if (!authUser) return
+
+    const interval = setInterval(() => {
+      fetchProblems()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [authUser, fetchProblems])
+
+  // =========================
+  // REAL NOTIFICATIONS
+  // =========================
+
+  const notifications = useMemo(() => {
+    return problems
+      .filter(problem => problem && problem._id)
+      .map(problem => {
+        const status = problem.status || 'Reported'
+
+        let title = 'New Problem Reported'
+        let message = `${problem.title} has been reported at ${problem.location}.`
+        let type = 'problem'
+
+        if (status === 'Resolved') {
+          title = 'Problem Resolved'
+          message = `${problem.title} at ${problem.location} is marked as resolved.`
+          type = 'resolved'
+        } else if (status === 'In Progress') {
+          title = 'Work In Progress'
+          message = `Work on ${problem.title} at ${problem.location} is in progress.`
+          type = 'update'
+        } else if (status === 'Under Review') {
+          title = 'Problem Under Review'
+          message = `${problem.title} at ${problem.location} is under review.`
+          type = 'update'
+        }
+
+        const id = String(problem._id)
+
+        return {
+          id,
+          problemId: id,
+          title,
+          message,
+          time: problem.createdAt
+            ? new Date(problem.createdAt).toLocaleString()
+            : 'Recently',
+          type,
+          read: readNotifications.includes(id),
+          createdAt: problem.createdAt
+            ? new Date(problem.createdAt).getTime()
+            : 0,
+        }
+      })
+      .filter(notification =>
+        !dismissedNotifications.includes(notification.id)
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+  }, [problems, readNotifications, dismissedNotifications])
+
+  const unreadCount = notifications.filter(n => !n.read).length
+
+  // =========================
+  // NOTIFICATION ACTIONS
+  // =========================
+
+  const markAsRead = (id) => {
+    setReadNotifications(prev => {
+      const updated = [...new Set([...prev, id])]
+
+      localStorage.setItem(
+        'civiclens_read_notifications',
+        JSON.stringify(updated)
+      )
+
+      return updated
+    })
+  }
+
+  const markAllAsRead = () => {
+    const allIds = notifications.map(n => n.id)
+
+    setReadNotifications(prev => {
+      const updated = [...new Set([...prev, ...allIds])]
+
+      localStorage.setItem(
+        'civiclens_read_notifications',
+        JSON.stringify(updated)
+      )
+
+      return updated
+    })
+  }
+
+  const clearAllNotifications = () => {
+    setDismissedNotifications(prev => {
+      const updated = [
+        ...new Set([
+          ...prev,
+          ...notifications.map(n => n.id),
+        ]),
+      ]
+
+      localStorage.setItem(
+        'civiclens_dismissed_notifications',
+        JSON.stringify(updated)
+      )
+
+      return updated
+    })
+  }
+
+  const notificationIcon = {
+    problem: AlertTriangle,
+    update: Clock,
+    resolved: CheckCircle2,
+  }
+
+  // =========================
+  // AUTHENTICATION SUBMIT
+  // =========================
+
   const handleAuthSubmit = async (event) => {
     event.preventDefault()
     setAuthError('')
@@ -198,7 +371,6 @@ function App() {
         throw new Error(data.message || 'Authentication failed.')
       }
 
-      // After signup, switch to login
       if (authMode === 'signup') {
         setAuthMode('login')
         setAuthPassword('')
@@ -207,7 +379,6 @@ function App() {
         return
       }
 
-      // Save JWT and user details after login
       if (!data.token) {
         throw new Error('JWT token was not received from the server.')
       }
@@ -232,7 +403,10 @@ function App() {
     }
   }
 
-  // Logout
+  // =========================
+  // LOGOUT
+  // =========================
+
   const handleLogout = () => {
     localStorage.removeItem('civiclens_session')
     localStorage.removeItem('civiclens_user')
@@ -242,59 +416,20 @@ function App() {
     setProblemsError('')
     setDashboardAnalytics(null)
     setAnalyticsError('')
+    setReadNotifications([])
+    setDismissedNotifications([])
     setAuthMode('login')
     setAuthEmail('')
     setAuthPassword('')
     setAuthConfirmPassword('')
     setAuthError('')
     setAuthSuccess('')
+    setShowNotifications(false)
   }
 
-  // Dashboard state
-  const [active, setActive] = useState('Dashboard')
-  const [showReport, setShowReport] = useState(false)
-  const [search, setSearch] = useState('')
-  const [selectedProblem, setSelectedProblem] = useState(null)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [showNotifications, setShowNotifications] = useState(false)
-
-  // Notifications
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: 'New Problem Reported',
-      message: 'A pothole has been reported in Sector 15, Chandigarh.',
-      time: '5 minutes ago',
-      type: 'problem',
-      read: false,
-    },
-    {
-      id: 2,
-      title: 'Problem Status Updated',
-      message: 'Garbage overflowing in Sector 22 is now under review.',
-      time: '1 hour ago',
-      type: 'update',
-      read: false,
-    },
-    {
-      id: 3,
-      title: 'Issue Resolved',
-      message: 'Streetlight problem in Sector 34 has been resolved.',
-      time: '3 hours ago',
-      type: 'resolved',
-      read: false,
-    },
-    {
-      id: 4,
-      title: 'Community Update',
-      message: 'Your community has received new support votes.',
-      time: 'Yesterday',
-      type: 'community',
-      read: true,
-    },
-  ])
-
-  const unreadCount = notifications.filter(n => !n.read).length
+  // =========================
+  // NAVIGATION
+  // =========================
 
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard },
@@ -305,7 +440,27 @@ function App() {
     { name: 'Settings', icon: Settings },
   ]
 
-  // Search backend reports
+  const openPage = (name) => {
+    setActive(name)
+    setShowReport(false)
+    setSelectedProblem(null)
+    setSearch('')
+    setMenuOpen(false)
+    setShowNotifications(false)
+
+    if (name === 'Problems' || name === 'Dashboard') {
+      fetchProblems()
+    }
+
+    if (name === 'Dashboard') {
+      fetchDashboardAnalytics()
+    }
+  }
+
+  // =========================
+  // SEARCH AND COLORS
+  // =========================
+
   const filteredProblems = problems.filter(p =>
     `${p.title || ''} ${p.category || ''} ${p.location || ''}`
       .toLowerCase()
@@ -325,48 +480,10 @@ function App() {
     Resolved: 'bg-green-50 text-green-600',
   }
 
-  const notificationIcon = {
-    problem: AlertTriangle,
-    update: Clock,
-    resolved: CheckCircle2,
-    community: Users,
-  }
+  // =========================
+  // PROBLEM TABLE
+  // =========================
 
-  const markAsRead = (id) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    )
-  }
-
-  const markAllAsRead = () => {
-    setNotifications(prev =>
-      prev.map(n => ({ ...n, read: true }))
-    )
-  }
-
-  const clearAllNotifications = () => {
-    setNotifications([])
-  }
-
-  // Navigate between pages
-  const openPage = (name) => {
-    setActive(name)
-    setShowReport(false)
-    setSelectedProblem(null)
-    setSearch('')
-    setMenuOpen(false)
-    setShowNotifications(false)
-
-    if (name === 'Problems' || name === 'Dashboard') {
-      fetchProblems()
-    }
-
-    if (name === 'Dashboard') {
-      fetchDashboardAnalytics()
-    }
-  }
-
-  // Reusable problems table
   const ProblemTable = ({ data }) => (
     <div className="overflow-x-auto">
       <table className="w-full text-left min-w-[650px]">
@@ -430,7 +547,10 @@ function App() {
     </div>
   )
 
-  // Login and signup screen
+  // =========================
+  // LOGIN / SIGNUP SCREEN
+  // =========================
+
   if (!authUser) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
@@ -650,12 +770,15 @@ function App() {
     )
   }
 
-  // Main dashboard
+  // =========================
+  // MAIN DASHBOARD
+  // =========================
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       <div className="flex min-h-screen">
 
-        {/* Sidebar */}
+        {/* SIDEBAR */}
         <aside className={`${
           menuOpen ? 'block' : 'hidden'
         } md:block w-64 shrink-0 bg-slate-950 text-white p-6`}>
@@ -703,10 +826,10 @@ function App() {
           </div>
         </aside>
 
-        {/* Main content */}
+        {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 p-5 md:p-8">
 
-          {/* Header */}
+          {/* HEADER */}
           <header className="flex flex-wrap items-center justify-between gap-4 mb-9">
             <div className="flex items-center gap-3">
               <button
@@ -729,10 +852,13 @@ function App() {
 
             <div className="flex items-center gap-3">
 
-              {/* Notifications */}
+              {/* NOTIFICATIONS */}
               <div className="relative">
                 <button
-                  onClick={() => setShowNotifications(!showNotifications)}
+                  onClick={() => {
+                    setShowNotifications(!showNotifications)
+                    if (!showNotifications) fetchProblems()
+                  }}
                   className="relative p-3 bg-white rounded-xl border hover:bg-slate-50 transition"
                   aria-label="Notifications"
                 >
@@ -747,6 +873,7 @@ function App() {
 
                 {showNotifications && (
                   <div className="absolute right-0 top-14 z-[100] w-[min(370px,calc(100vw-35px))] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
+
                     <div className="p-4 border-b flex items-center justify-between">
                       <div>
                         <h3 className="font-bold text-lg">Notifications</h3>
@@ -786,7 +913,7 @@ function App() {
                     <div className="max-h-[380px] overflow-y-auto">
                       {notifications.length > 0 ? (
                         notifications.map(n => {
-                          const Icon = notificationIcon[n.type]
+                          const Icon = notificationIcon[n.type] || Bell
 
                           return (
                             <div
@@ -848,14 +975,14 @@ function App() {
 
                     <div className="p-3 bg-slate-50 text-center">
                       <p className="text-xs text-slate-400">
-                        CivicLens Community Notifications
+                        Live Community Reports
                       </p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* User profile */}
+              {/* USER PROFILE */}
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-xl border">
                   <div className="w-9 h-9 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold">
@@ -882,7 +1009,7 @@ function App() {
             </div>
           </header>
 
-          {/* Report problem page */}
+          {/* REPORT PROBLEM */}
           {showReport ? (
             <ReportProblem
               onBack={() => {
@@ -901,7 +1028,7 @@ function App() {
             <Community />
           ) : active === 'Problems' ? (
 
-            /* Problems page */
+            /* PROBLEMS PAGE */
             <div className="space-y-6">
               <section className="bg-gradient-to-r from-slate-900 to-cyan-900 text-white rounded-3xl p-7">
                 <p className="text-cyan-300 text-sm font-semibold">
@@ -975,7 +1102,7 @@ function App() {
 
           ) : active === 'Dashboard' ? (
 
-            /* Dashboard */
+            /* DASHBOARD */
             <>
               <section className="bg-gradient-to-r from-slate-900 to-cyan-900 text-white rounded-3xl p-7 md:p-9 mb-8">
                 <p className="text-cyan-300 text-sm font-medium">
@@ -998,7 +1125,7 @@ function App() {
                 </button>
               </section>
 
-              {/* Live MongoDB dashboard statistics */}
+              {/* LIVE ANALYTICS */}
               <section className="mb-8">
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                   <div>
@@ -1056,10 +1183,9 @@ function App() {
                     },
                     {
                       title: 'Under Review',
-                      value:
-                        dashboardAnalytics?.statusStats?.find(
-                          item => item.status === 'Under Review'
-                        )?.count ?? 0,
+                      value: dashboardAnalytics?.statusStats?.find(
+                        item => item.status === 'Under Review'
+                      )?.count ?? 0,
                       icon: Clock,
                       color: 'text-purple-600',
                       bg: 'bg-purple-50',
@@ -1093,6 +1219,7 @@ function App() {
                 </div>
               </section>
 
+              {/* RECENT PROBLEMS */}
               <section className="bg-white rounded-2xl border shadow-sm p-5">
                 <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
                   <div>
@@ -1132,7 +1259,7 @@ function App() {
 
           ) : (
 
-            /* Other pages */
+            /* OTHER PAGES */
             <section className="bg-white rounded-2xl border p-10 text-center">
               <div className="bg-cyan-50 text-cyan-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto">
                 <Settings size={30} />
@@ -1153,7 +1280,7 @@ function App() {
             </section>
           )}
 
-          {/* Problem details modal */}
+          {/* PROBLEM DETAILS MODAL */}
           {selectedProblem && (
             <div className="fixed inset-0 z-[1000] bg-slate-950/50 flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl p-6 w-full max-w-lg">

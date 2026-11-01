@@ -1,42 +1,51 @@
 
 import React, { useState } from "react";
 
+function getUser() {
+    try {
+        return JSON.parse(localStorage.getItem("civiclens_user")) || {};
+    } catch {
+        return {};
+    }
+}
+
+function getSavedNotifications() {
+    try {
+        return JSON.parse(localStorage.getItem("civiclens_notifications")) || {
+            email: true,
+            updates: true,
+            resolved: true,
+            community: false,
+        };
+    } catch {
+        return {
+            email: true,
+            updates: true,
+            resolved: true,
+            community: false,
+        };
+    }
+}
+
 function Settings() {
-    const [profile, setProfile] = useState({
-        name: "Komal",
-        email: "komalmakar513@gmail.com",
-        role: "Citizen",
-        location: "Chandigarh",
-    });
+    const user = getUser();
 
-    const [notifications, setNotifications] = useState({
-        email: true,
-        updates: true,
-        resolved: true,
-        community: false,
-    });
-
+    const [notifications, setNotifications] = useState(getSavedNotifications);
     const [message, setMessage] = useState("");
 
-    const handleChange = (e) => {
-        setProfile({ ...profile, [e.target.name]: e.target.value });
-    };
-
     const toggleNotification = (key) => {
-        setNotifications({
-            ...notifications,
-            [key]: !notifications[key],
-        });
+        setNotifications(prev => ({
+            ...prev,
+            [key]: !prev[key],
+        }));
     };
 
     const handleSave = () => {
-        localStorage.setItem("civiclens_profile", JSON.stringify(profile));
         localStorage.setItem(
             "civiclens_notifications",
             JSON.stringify(notifications)
         );
-        setMessage("Settings saved successfully!");
-        setTimeout(() => setMessage(""), 3000);
+        setMessage("Notification preferences saved!");
     };
 
     return (
@@ -53,19 +62,20 @@ function Settings() {
             <section style={cardStyle}>
                 <h2>👤 Profile Information</h2>
                 <p style={descriptionStyle}>
-                    Update your personal account information.
+                    Your details from your currently logged-in account.
                 </p>
 
-                {["name", "email", "role", "location"].map((field) => (
-                    <div key={field} style={{ marginBottom: "18px" }}>
-                        <label style={labelStyle}>
-                            {field.charAt(0).toUpperCase() + field.slice(1)}
-                        </label>
+                {[
+                    ["Name", user.name || "Not available"],
+                    ["Email", user.email || "Not available"],
+                    ["Role", user.role || "Citizen"],
+                    ["Location", user.location || "Not set"],
+                ].map(([label, value]) => (
+                    <div key={label} style={{ marginBottom: "18px" }}>
+                        <label style={labelStyle}>{label}</label>
                         <input
-                            name={field}
-                            value={profile[field]}
-                            onChange={handleChange}
-                            readOnly={field === "role"}
+                            value={value}
+                            readOnly
                             style={inputStyle}
                         />
                     </div>
@@ -75,7 +85,7 @@ function Settings() {
             <section style={cardStyle}>
                 <h2>🔔 Notification Preferences</h2>
                 <p style={descriptionStyle}>
-                    Choose which notifications you want to receive.
+                    Choose which types of notifications you would like to receive.
                 </p>
 
                 {[
@@ -94,6 +104,10 @@ function Settings() {
                         />
                     </div>
                 ))}
+                <p style={{ color: "#718096", fontSize: "12px", marginTop: "14px" }}>
+                    These preferences are saved on this device. Actual email
+                    and push notifications are not connected yet.
+                </p>
             </section>
 
             <section style={cardStyle}>
@@ -105,11 +119,11 @@ function Settings() {
                 </p>
                 <p><strong>Platform:</strong> CivicLens</p>
                 <p><strong>Version:</strong> 1.0.0</p>
-                <p><strong>Account Type:</strong> Citizen</p>
+                <p><strong>Account Type:</strong> {user.role || "Citizen"}</p>
             </section>
 
             {message && (
-                <p style={{ color: "green", fontWeight: "600" }}>
+                <p style={{ color: "green", fontWeight: "600", marginBottom: "15px" }}>
                     {message}
                 </p>
             )}
@@ -146,6 +160,7 @@ const inputStyle = {
     border: "1px solid #cbd5e0",
     borderRadius: "8px",
     fontSize: "15px",
+    background: "#f8fafc",
 };
 
 const toggleRow = {

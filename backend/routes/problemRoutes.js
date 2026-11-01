@@ -1,3 +1,4 @@
+
 const express = require("express");
 
 const {
@@ -26,7 +27,6 @@ router.route("/:id")
 
 router.patch("/:id/status", adminOnly, updateProblemStatus);
 
-// Community support / unsupport
 router.post("/:id/support", toggleProblemSupport);
 
 module.exports = router;
