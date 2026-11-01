@@ -22,6 +22,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/problems", require("./routes/problemRoutes"));
+app.use("/api/analytics", require("./routes/analyticsRoutes"));
 const startServer = async () => {
   try {
     await connectDB();
