@@ -1,3 +1,4 @@
+
 const Problem = require("../models/Problem");
 
 const createProblem = async (req, res) => {
@@ -46,7 +47,6 @@ const createProblem = async (req, res) => {
 const getProblems = async (req, res) => {
   try {
     const { category, severity, status } = req.query;
-
     const filter = {};
 
     if (category) filter.category = category;
@@ -175,10 +175,54 @@ const deleteProblem = async (req, res) => {
   }
 };
 
+// Community support / unsupport
+const toggleProblemSupport = async (req, res) => {
+  try {
+    const problem = await Problem.findById(req.params.id);
+
+    if (!problem) {
+      return res.status(404).json({
+        success: false,
+        message: "Problem not found.",
+      });
+    }
+
+    const userId = req.user._id;
+
+    const alreadySupported = problem.supportedBy.some(
+      (id) => id.toString() === userId.toString()
+    );
+
+    if (alreadySupported) {
+      problem.supportedBy.pull(userId);
+    } else {
+      problem.supportedBy.addToSet(userId);
+    }
+
+    problem.votes = problem.supportedBy.length;
+    await problem.save();
+
+    return res.status(200).json({
+      success: true,
+      message: alreadySupported
+        ? "Support removed successfully."
+        : "Problem supported successfully.",
+      votes: problem.votes,
+      supported: !alreadySupported,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update support.",
+    });
+  }
+};
+
 module.exports = {
   createProblem,
   getProblems,
   getProblemById,
   updateProblemStatus,
   deleteProblem,
+  toggleProblemSupport,
 };

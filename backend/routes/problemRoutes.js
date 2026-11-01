@@ -6,6 +6,7 @@ const {
   getProblemById,
   updateProblemStatus,
   deleteProblem,
+  toggleProblemSupport,
 } = require("../controllers/problemController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -13,7 +14,6 @@ const { adminOnly } = require("../middleware/adminMiddleware");
 
 const router = express.Router();
 
-// All problem routes require authentication
 router.use(protect);
 
 router.route("/")
@@ -25,5 +25,8 @@ router.route("/:id")
   .delete(deleteProblem);
 
 router.patch("/:id/status", adminOnly, updateProblemStatus);
+
+// Community support / unsupport
+router.post("/:id/support", toggleProblemSupport);
 
 module.exports = router;
