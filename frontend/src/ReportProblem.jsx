@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import { MapPin, Upload, Send, ArrowLeft } from 'lucide-react'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+
 function ReportProblem({ onBack }) {
     const [form, setForm] = useState({
         title: '',
@@ -13,22 +15,57 @@ function ReportProblem({ onBack }) {
 
     const [image, setImage] = useState(null)
     const [message, setMessage] = useState('')
+    const [error, setError] = useState('')
+    const [loading, setLoading] = useState(false)
 
     const handleChange = (e) => {
         setForm({ ...form, [e.target.name]: e.target.value })
     }
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
-        setMessage('Report submitted successfully! Backend connection will be added soon.')
-        setForm({
-            title: '',
-            category: '',
-            description: '',
-            severity: 'Medium',
-            location: '',
-        })
-        setImage(null)
+        setMessage('')
+        setError('')
+
+        const token = localStorage.getItem('civiclens_session')
+
+        if (!token) {
+            setError('Please log in before submitting a report.')
+            return
+        }
+
+        try {
+            setLoading(true)
+
+            const response = await fetch(`${API_URL}/api/problems`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(form),
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to submit report.')
+            }
+
+            setMessage('Report submitted successfully!')
+            setForm({
+                title: '',
+                category: '',
+                description: '',
+                severity: 'Medium',
+                location: '',
+            })
+            setImage(null)
+        } catch (err) {
+            setError(err.message || 'Something went wrong.')
+        } finally {
+            setLoading(false)
+        }
     }
 
     return (
@@ -46,6 +83,12 @@ function ReportProblem({ onBack }) {
                 {message && (
                     <div className="bg-green-50 text-green-700 p-4 rounded-xl mt-5">
                         {message}
+                    </div>
+                )}
+
+                {error && (
+                    <div className="bg-red-50 text-red-700 p-4 rounded-xl mt-5">
+                        {error}
                     </div>
                 )}
 
@@ -138,13 +181,18 @@ function ReportProblem({ onBack }) {
                                 onChange={e => setImage(e.target.files[0] || null)}
                             />
                         </label>
+                        <p className="text-xs text-slate-400 mt-2">
+                            Image upload will be enabled separately.
+                        </p>
                     </div>
 
                     <button
                         type="submit"
-                        className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl p-4 flex justify-center items-center gap-2"
+                        disabled={loading}
+                        className="w-full bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white font-semibold rounded-xl p-4 flex justify-center items-center gap-2"
                     >
-                        <Send size={18} /> Submit Report
+                        <Send size={18} />
+                        {loading ? 'Submitting...' : 'Submit Report'}
                     </button>
                 </form>
             </div>

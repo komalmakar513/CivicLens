@@ -8,17 +8,15 @@ const getDashboardAnalytics = async (req, res) => {
       pendingReports,
       highPriorityReports,
       categoryStats,
+      severityStats,
+      statusStats,
       monthlyStats,
     ] = await Promise.all([
       Problem.countDocuments(),
 
-      Problem.countDocuments({
-        status: "Resolved",
-      }),
+      Problem.countDocuments({ status: "Resolved" }),
 
-      Problem.countDocuments({
-        status: { $ne: "Resolved" },
-      }),
+      Problem.countDocuments({ status: { $ne: "Resolved" } }),
 
       Problem.countDocuments({
         severity: "High",
@@ -32,8 +30,24 @@ const getDashboardAnalytics = async (req, res) => {
             count: { $sum: 1 },
           },
         },
+        { $sort: { count: -1 } },
+      ]),
+
+      Problem.aggregate([
         {
-          $sort: { count: -1 },
+          $group: {
+            _id: "$severity",
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+
+      Problem.aggregate([
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+          },
         },
       ]),
 
@@ -58,11 +72,7 @@ const getDashboardAnalytics = async (req, res) => {
             reports: { $sum: 1 },
             resolved: {
               $sum: {
-                $cond: [
-                  { $eq: ["$status", "Resolved"] },
-                  1,
-                  0,
-                ],
+                $cond: [{ $eq: ["$status", "Resolved"] }, 1, 0],
               },
             },
           },
@@ -75,6 +85,42 @@ const getDashboardAnalytics = async (req, res) => {
         },
       ]),
     ]);
+
+    // Include months with zero reports so the chart always shows six months.
+    const monthlyMap = new Map(
+      monthlyStats.map((item) => [
+        `${item._id.year}-${String(item._id.month).padStart(2, "0")}`,
+        {
+          reports: item.reports,
+          resolved: item.resolved,
+        },
+      ])
+    );
+
+    const now = new Date();
+
+    const completeMonthlyStats = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(
+        now.getFullYear(),
+        now.getMonth() - 5 + index,
+        1
+      );
+
+      const month = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}`;
+
+      const values = monthlyMap.get(month) || {
+        reports: 0,
+        resolved: 0,
+      };
+
+      return {
+        month,
+        reports: values.reports,
+        resolved: values.resolved,
+      };
+    });
 
     const analytics = {
       totalReports,
@@ -92,11 +138,17 @@ const getDashboardAnalytics = async (req, res) => {
         count: item.count,
       })),
 
-      monthlyStats: monthlyStats.map((item) => ({
-        month: `${item._id.year}-${String(item._id.month).padStart(2, "0")}`,
-        reports: item.reports,
-        resolved: item.resolved,
+      severityStats: severityStats.map((item) => ({
+        severity: item._id,
+        count: item.count,
       })),
+
+      statusStats: statusStats.map((item) => ({
+        status: item._id,
+        count: item.count,
+      })),
+
+      monthlyStats: completeMonthlyStats,
     };
 
     return res.status(200).json({

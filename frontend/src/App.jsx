@@ -1,10 +1,10 @@
-
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard, MapPin, FileText, BarChart3,
   Users, Settings, Bell, Plus, Search,
   AlertTriangle, CheckCircle2, Clock, Menu, Eye,
-  Check, CheckCheck, Trash2, X, LogOut, Mail, LockKeyhole, UserRound
+  Check, CheckCheck, Trash2, X, LogOut, Mail,
+  LockKeyhole, UserRound
 } from 'lucide-react'
 
 import ReportProblem from './ReportProblem'
@@ -13,23 +13,121 @@ import Analytics from './Analytics'
 import Community from './Community'
 import SettingsPage from './Settings'
 
-const problems = [
-  { id: 1, title: 'Large pothole on main road', category: 'Road Damage', location: 'Sector 15, Chandigarh', severity: 'High', status: 'In Progress' },
-  { id: 2, title: 'Garbage overflowing', category: 'Garbage', location: 'Sector 22, Chandigarh', severity: 'Medium', status: 'Under Review' },
-  { id: 3, title: 'Streetlight not working', category: 'Streetlight', location: 'Sector 34, Chandigarh', severity: 'Low', status: 'Resolved' },
-  { id: 4, title: 'Waterlogging near market', category: 'Waterlogging', location: 'Sector 17, Chandigarh', severity: 'High', status: 'Reported' },
-  { id: 5, title: 'Damaged footpath', category: 'Footpath Damage', location: 'Sector 20, Chandigarh', severity: 'Medium', status: 'Reported' },
-]
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 function App() {
-  // Demo authentication is stored in this browser. Connect a backend for production security.
+  // Authentication state
   const [authUser, setAuthUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('civiclens_session') || 'null')
+      const token = localStorage.getItem('civiclens_session')
+      const user = JSON.parse(localStorage.getItem('civiclens_user') || 'null')
+
+      if (!token || token.split('.').length !== 3 || !user) {
+        return null
+      }
+
+      return user
     } catch {
       return null
     }
   })
+
+  // Backend problems state
+  const [problems, setProblems] = useState([])
+  const [problemsLoading, setProblemsLoading] = useState(false)
+  const [problemsError, setProblemsError] = useState('')
+
+  // Dashboard analytics state
+  const [dashboardAnalytics, setDashboardAnalytics] = useState(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [analyticsError, setAnalyticsError] = useState('')
+
+  // Fetch problems from MongoDB through the backend
+  const fetchProblems = useCallback(async () => {
+    const token = localStorage.getItem('civiclens_session')
+
+    if (!token) {
+      setProblemsError('Please log in to view problems.')
+      return
+    }
+
+    try {
+      setProblemsLoading(true)
+      setProblemsError('')
+
+      const response = await fetch(`${API_URL}/api/problems`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Could not load problems.')
+      }
+
+      setProblems(data.problems || [])
+    } catch (error) {
+      console.error('Fetch problems error:', error)
+      setProblemsError(error.message || 'Something went wrong.')
+    } finally {
+      setProblemsLoading(false)
+    }
+  }, [])
+
+  // Fetch live dashboard analytics from MongoDB
+  const fetchDashboardAnalytics = useCallback(async () => {
+    const token = localStorage.getItem('civiclens_session')
+
+    if (!token) {
+      setAnalyticsError('Please log in to view dashboard analytics.')
+      setDashboardAnalytics(null)
+      return
+    }
+
+    try {
+      setAnalyticsLoading(true)
+      setAnalyticsError('')
+
+      const response = await fetch(`${API_URL}/api/analytics/dashboard`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || 'Could not load dashboard analytics.'
+        )
+      }
+
+      console.log('Live dashboard analytics:', data.analytics)
+
+      setDashboardAnalytics(data.analytics)
+    } catch (error) {
+      console.error('Dashboard analytics error:', error)
+      setAnalyticsError(
+        error.message || 'Something went wrong while loading analytics.'
+      )
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }, [])
+
+  // Fetch data after login or when the app opens with an existing session
+  useEffect(() => {
+    if (authUser) {
+      fetchProblems()
+      fetchDashboardAnalytics()
+    }
+  }, [authUser, fetchProblems, fetchDashboardAnalytics])
+
+  // Authentication form state
   const [authMode, setAuthMode] = useState('login')
   const [authName, setAuthName] = useState('')
   const [authEmail, setAuthEmail] = useState('')
@@ -38,11 +136,14 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authSuccess, setAuthSuccess] = useState('')
   const [showAuthPassword, setShowAuthPassword] = useState(false)
+  const [authLoading, setAuthLoading] = useState(false)
 
-  const handleAuthSubmit = (event) => {
+  // Backend signup and login
+  const handleAuthSubmit = async (event) => {
     event.preventDefault()
     setAuthError('')
     setAuthSuccess('')
+
     const email = authEmail.trim().toLowerCase()
 
     if (!email || !authPassword) {
@@ -51,47 +152,105 @@ function App() {
     }
 
     if (authMode === 'signup') {
-      if (!authName.trim()) return setAuthError('Please enter your full name.')
-      if (authPassword.length < 6) return setAuthError('Password must contain at least 6 characters.')
-      if (authPassword !== authConfirmPassword) return setAuthError('Passwords do not match.')
+      if (!authName.trim()) {
+        setAuthError('Please enter your full name.')
+        return
+      }
 
-      const newUser = { name: authName.trim(), email, password: authPassword }
-      localStorage.setItem('civiclens_user', JSON.stringify(newUser))
-      setAuthMode('login')
+      if (authPassword.length < 6) {
+        setAuthError('Password must contain at least 6 characters.')
+        return
+      }
+
+      if (authPassword !== authConfirmPassword) {
+        setAuthError('Passwords do not match.')
+        return
+      }
+    }
+
+    try {
+      setAuthLoading(true)
+
+      const endpoint = authMode === 'signup' ? 'register' : 'login'
+
+      const response = await fetch(`${API_URL}/api/auth/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(
+          authMode === 'signup'
+            ? {
+                name: authName.trim(),
+                email,
+                password: authPassword,
+              }
+            : {
+                email,
+                password: authPassword,
+              }
+        ),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Authentication failed.')
+      }
+
+      // After signup, switch to login
+      if (authMode === 'signup') {
+        setAuthMode('login')
+        setAuthPassword('')
+        setAuthConfirmPassword('')
+        setAuthSuccess('Account created successfully. Please log in.')
+        return
+      }
+
+      // Save JWT and user details after login
+      if (!data.token) {
+        throw new Error('JWT token was not received from the server.')
+      }
+
+      const user = data.user || {
+        id: data.id,
+        name: data.name || authName || email.split('@')[0],
+        email: data.email || email,
+        role: data.role || 'citizen',
+      }
+
+      localStorage.setItem('civiclens_session', data.token)
+      localStorage.setItem('civiclens_user', JSON.stringify(user))
+
+      setAuthUser(user)
       setAuthPassword('')
       setAuthConfirmPassword('')
-      setAuthSuccess('Account created successfully. Please log in.')
-      return
+    } catch (error) {
+      setAuthError(error.message || 'Something went wrong. Please try again.')
+    } finally {
+      setAuthLoading(false)
     }
-
-    let savedUser = null
-    try {
-      savedUser = JSON.parse(localStorage.getItem('civiclens_user') || 'null')
-    } catch {
-      savedUser = null
-    }
-
-    if (!savedUser || savedUser.email !== email || savedUser.password !== authPassword) {
-      setAuthError('Invalid email or password. Please sign up first if you are a new user.')
-      return
-    }
-
-    const session = { name: savedUser.name, email: savedUser.email }
-    localStorage.setItem('civiclens_session', JSON.stringify(session))
-    setAuthUser(session)
-    setAuthPassword('')
   }
 
+  // Logout
   const handleLogout = () => {
     localStorage.removeItem('civiclens_session')
+    localStorage.removeItem('civiclens_user')
+
     setAuthUser(null)
+    setProblems([])
+    setProblemsError('')
+    setDashboardAnalytics(null)
+    setAnalyticsError('')
     setAuthMode('login')
     setAuthEmail('')
     setAuthPassword('')
+    setAuthConfirmPassword('')
     setAuthError('')
     setAuthSuccess('')
   }
 
+  // Dashboard state
   const [active, setActive] = useState('Dashboard')
   const [showReport, setShowReport] = useState(false)
   const [search, setSearch] = useState('')
@@ -99,6 +258,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
 
+  // Notifications
   const [notifications, setNotifications] = useState([
     {
       id: 1,
@@ -145,8 +305,9 @@ function App() {
     { name: 'Settings', icon: Settings },
   ]
 
+  // Search backend reports
   const filteredProblems = problems.filter(p =>
-    `${p.title} ${p.category} ${p.location}`
+    `${p.title || ''} ${p.category || ''} ${p.location || ''}`
       .toLowerCase()
       .includes(search.toLowerCase())
   )
@@ -187,6 +348,7 @@ function App() {
     setNotifications([])
   }
 
+  // Navigate between pages
   const openPage = (name) => {
     setActive(name)
     setShowReport(false)
@@ -194,8 +356,17 @@ function App() {
     setSearch('')
     setMenuOpen(false)
     setShowNotifications(false)
+
+    if (name === 'Problems' || name === 'Dashboard') {
+      fetchProblems()
+    }
+
+    if (name === 'Dashboard') {
+      fetchDashboardAnalytics()
+    }
   }
 
+  // Reusable problems table
   const ProblemTable = ({ data }) => (
     <div className="overflow-x-auto">
       <table className="w-full text-left min-w-[650px]">
@@ -211,22 +382,27 @@ function App() {
 
         <tbody>
           {data.map(p => (
-            <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
+            <tr
+              key={p._id || p.id}
+              className="border-b border-slate-100 hover:bg-slate-50"
+            >
               <td className="py-4 pr-3">
                 <p className="font-semibold text-sm">{p.title}</p>
                 <p className="text-xs text-slate-400">{p.category}</p>
               </td>
 
-              <td className="py-4 text-sm text-slate-500">{p.location}</td>
+              <td className="py-4 text-sm text-slate-500">
+                {p.location}
+              </td>
 
               <td className="py-4">
-                <span className={`px-3 py-1 rounded-full text-xs ${severityColors[p.severity]}`}>
+                <span className={`px-3 py-1 rounded-full text-xs ${severityColors[p.severity] || 'bg-slate-100 text-slate-600'}`}>
                   {p.severity}
                 </span>
               </td>
 
               <td className="py-4">
-                <span className={`px-3 py-1 rounded-full text-xs ${statusColors[p.status]}`}>
+                <span className={`px-3 py-1 rounded-full text-xs ${statusColors[p.status] || 'bg-slate-100 text-slate-600'}`}>
                   {p.status}
                 </span>
               </td>
@@ -254,85 +430,219 @@ function App() {
     </div>
   )
 
+  // Login and signup screen
   if (!authUser) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute -top-28 -right-20 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-32 -left-20 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl" />
+
         <div className="relative w-full max-w-5xl min-h-[620px] bg-white rounded-3xl shadow-2xl overflow-hidden grid md:grid-cols-2">
           <div className="hidden md:flex flex-col justify-between bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-900 text-white p-10">
             <div>
               <div className="flex items-center gap-3">
-                <div className="bg-cyan-500 p-3 rounded-2xl"><MapPin size={28} /></div>
-                <div><h1 className="text-3xl font-bold">CivicLens</h1><p className="text-sm text-slate-300">Community Intelligence</p></div>
+                <div className="bg-cyan-500 p-3 rounded-2xl">
+                  <MapPin size={28} />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold">CivicLens</h1>
+                  <p className="text-sm text-slate-300">Community Intelligence</p>
+                </div>
               </div>
+
               <div className="mt-24">
-                <p className="text-cyan-300 text-sm font-semibold tracking-widest">YOUR CITY, YOUR VOICE</p>
-                <h2 className="text-4xl font-bold leading-tight mt-4">Make your community a better place.</h2>
-                <p className="text-slate-300 mt-5 leading-relaxed">Report local problems, track progress and work together to improve public spaces.</p>
+                <p className="text-cyan-300 text-sm font-semibold tracking-widest">
+                  YOUR CITY, YOUR VOICE
+                </p>
+                <h2 className="text-4xl font-bold leading-tight mt-4">
+                  Make your community a better place.
+                </h2>
+                <p className="text-slate-300 mt-5 leading-relaxed">
+                  Report local problems, track progress and work together to improve public spaces.
+                </p>
               </div>
             </div>
-            <p className="text-xs text-slate-400">© 2026 CivicLens. Building better communities together.</p>
+
+            <p className="text-xs text-slate-400">
+              © 2026 CivicLens. Building better communities together.
+            </p>
           </div>
 
           <div className="flex items-center justify-center p-7 sm:p-12">
             <div className="w-full max-w-md">
               <div className="md:hidden flex items-center gap-3 mb-10">
-                <div className="bg-cyan-500 text-white p-3 rounded-xl"><MapPin size={25} /></div>
-                <div><h1 className="text-2xl font-bold text-slate-900">CivicLens</h1><p className="text-xs text-slate-500">Community Intelligence</p></div>
+                <div className="bg-cyan-500 text-white p-3 rounded-xl">
+                  <MapPin size={25} />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900">CivicLens</h1>
+                  <p className="text-xs text-slate-500">Community Intelligence</p>
+                </div>
               </div>
-              <p className="text-sm font-semibold text-cyan-700">WELCOME TO CIVICLENS</p>
-              <h2 className="text-3xl font-bold text-slate-900 mt-2">{authMode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
-              <p className="text-slate-500 mt-2">{authMode === 'login' ? 'Log in to continue to your community dashboard.' : 'Join your community and help make a difference.'}</p>
+
+              <p className="text-sm font-semibold text-cyan-700">
+                WELCOME TO CIVICLENS
+              </p>
+
+              <h2 className="text-3xl font-bold text-slate-900 mt-2">
+                {authMode === 'login' ? 'Welcome back' : 'Create your account'}
+              </h2>
+
+              <p className="text-slate-500 mt-2">
+                {authMode === 'login'
+                  ? 'Log in to continue to your community dashboard.'
+                  : 'Join your community and help make a difference.'}
+              </p>
 
               <div className="grid grid-cols-2 bg-slate-100 rounded-xl p-1 mt-8 mb-6">
-                <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess('') }}
-                  className={`py-2.5 rounded-lg text-sm font-semibold ${authMode === 'login' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-500'}`}>Login</button>
-                <button type="button" onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthSuccess('') }}
-                  className={`py-2.5 rounded-lg text-sm font-semibold ${authMode === 'signup' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-500'}`}>Sign up</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login')
+                    setAuthError('')
+                    setAuthSuccess('')
+                  }}
+                  className={`py-2.5 rounded-lg text-sm font-semibold ${
+                    authMode === 'login'
+                      ? 'bg-white text-cyan-700 shadow-sm'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  Login
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('signup')
+                    setAuthError('')
+                    setAuthSuccess('')
+                  }}
+                  className={`py-2.5 rounded-lg text-sm font-semibold ${
+                    authMode === 'signup'
+                      ? 'bg-white text-cyan-700 shadow-sm'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  Sign up
+                </button>
               </div>
 
               <form onSubmit={handleAuthSubmit} className="space-y-4">
                 {authMode === 'signup' && (
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Full name</span>
+                    <span className="text-sm font-medium text-slate-700">
+                      Full name
+                    </span>
+
                     <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
                       <UserRound size={18} className="text-slate-400" />
-                      <input value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Enter your full name" className="w-full outline-none text-sm" autoComplete="name" />
+                      <input
+                        value={authName}
+                        onChange={e => setAuthName(e.target.value)}
+                        placeholder="Enter your full name"
+                        className="w-full outline-none text-sm"
+                        autoComplete="name"
+                      />
                     </div>
                   </label>
                 )}
+
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Email address</span>
+                  <span className="text-sm font-medium text-slate-700">
+                    Email address
+                  </span>
+
                   <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
                     <Mail size={18} className="text-slate-400" />
-                    <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@example.com" className="w-full outline-none text-sm" autoComplete="email" />
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={e => setAuthEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full outline-none text-sm"
+                      autoComplete="email"
+                      required
+                    />
                   </div>
                 </label>
+
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">Password</span>
+                  <span className="text-sm font-medium text-slate-700">
+                    Password
+                  </span>
+
                   <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
                     <LockKeyhole size={18} className="text-slate-400" />
-                    <input type={showAuthPassword ? 'text' : 'password'} value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="Enter your password" className="w-full outline-none text-sm" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} />
-                    <button type="button" onClick={() => setShowAuthPassword(!showAuthPassword)} className="text-xs font-semibold text-cyan-700">{showAuthPassword ? 'Hide' : 'Show'}</button>
+                    <input
+                      type={showAuthPassword ? 'text' : 'password'}
+                      value={authPassword}
+                      onChange={e => setAuthPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      className="w-full outline-none text-sm"
+                      autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                      required
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthPassword(!showAuthPassword)}
+                      className="text-xs font-semibold text-cyan-700"
+                    >
+                      {showAuthPassword ? 'Hide' : 'Show'}
+                    </button>
                   </div>
                 </label>
+
                 {authMode === 'signup' && (
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Confirm password</span>
+                    <span className="text-sm font-medium text-slate-700">
+                      Confirm password
+                    </span>
+
                     <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
                       <LockKeyhole size={18} className="text-slate-400" />
-                      <input type={showAuthPassword ? 'text' : 'password'} value={authConfirmPassword} onChange={e => setAuthConfirmPassword(e.target.value)} placeholder="Re-enter your password" className="w-full outline-none text-sm" autoComplete="new-password" />
+                      <input
+                        type={showAuthPassword ? 'text' : 'password'}
+                        value={authConfirmPassword}
+                        onChange={e => setAuthConfirmPassword(e.target.value)}
+                        placeholder="Re-enter your password"
+                        className="w-full outline-none text-sm"
+                        autoComplete="new-password"
+                        required
+                      />
                     </div>
                   </label>
                 )}
-                {authError && <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{authError}</p>}
-                {authSuccess && <p role="status" className="text-sm text-green-700 bg-green-50 rounded-lg p-3">{authSuccess}</p>}
-                <button type="submit" className="w-full bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold py-3.5 rounded-xl transition shadow-lg shadow-cyan-500/20">
-                  {authMode === 'login' ? 'Login to CivicLens' : 'Create Account'}
+
+                {authError && (
+                  <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg p-3">
+                    {authError}
+                  </p>
+                )}
+
+                {authSuccess && (
+                  <p role="status" className="text-sm text-green-700 bg-green-50 rounded-lg p-3">
+                    {authSuccess}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-bold py-3.5 rounded-xl transition shadow-lg shadow-cyan-500/20"
+                >
+                  {authLoading
+                    ? 'Please wait...'
+                    : authMode === 'login'
+                      ? 'Login to CivicLens'
+                      : 'Create Account'}
                 </button>
               </form>
-              <p className="text-xs text-slate-400 text-center mt-6">By continuing, you agree to use CivicLens respectfully and responsibly.</p>
+
+              <p className="text-xs text-slate-400 text-center mt-6">
+                By continuing, you agree to use CivicLens respectfully and responsibly.
+              </p>
             </div>
           </div>
         </div>
@@ -340,11 +650,15 @@ function App() {
     )
   }
 
+  // Main dashboard
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       <div className="flex min-h-screen">
 
-        <aside className={`${menuOpen ? 'block' : 'hidden'} md:block w-64 shrink-0 bg-slate-950 text-white p-6`}>
+        {/* Sidebar */}
+        <aside className={`${
+          menuOpen ? 'block' : 'hidden'
+        } md:block w-64 shrink-0 bg-slate-950 text-white p-6`}>
           <div className="flex items-center gap-3 mb-12">
             <div className="bg-cyan-500 p-2 rounded-xl">
               <MapPin size={25} />
@@ -368,10 +682,11 @@ function App() {
                 <button
                   key={item.name}
                   onClick={() => openPage(item.name)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${active === item.name
-                    ? 'bg-cyan-500 text-white'
-                    : 'text-slate-400 hover:bg-slate-800'
-                    }`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${
+                    active === item.name
+                      ? 'bg-cyan-500 text-white'
+                      : 'text-slate-400 hover:bg-slate-800'
+                  }`}
                 >
                   <Icon size={19} />
                   {item.name}
@@ -388,8 +703,10 @@ function App() {
           </div>
         </aside>
 
+        {/* Main content */}
         <main className="flex-1 min-w-0 p-5 md:p-8">
 
+          {/* Header */}
           <header className="flex flex-wrap items-center justify-between gap-4 mb-9">
             <div className="flex items-center gap-3">
               <button
@@ -412,7 +729,7 @@ function App() {
 
             <div className="flex items-center gap-3">
 
-              {/* Notification Center */}
+              {/* Notifications */}
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
@@ -430,7 +747,6 @@ function App() {
 
                 {showNotifications && (
                   <div className="absolute right-0 top-14 z-[100] w-[min(370px,calc(100vw-35px))] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
-
                     <div className="p-4 border-b flex items-center justify-between">
                       <div>
                         <h3 className="font-bold text-lg">Notifications</h3>
@@ -469,15 +785,15 @@ function App() {
 
                     <div className="max-h-[380px] overflow-y-auto">
                       {notifications.length > 0 ? (
-
                         notifications.map(n => {
                           const Icon = notificationIcon[n.type]
 
                           return (
                             <div
                               key={n.id}
-                              className={`p-4 border-b border-slate-100 hover:bg-slate-50 ${!n.read ? 'bg-cyan-50/60' : ''
-                                }`}
+                              className={`p-4 border-b border-slate-100 hover:bg-slate-50 ${
+                                !n.read ? 'bg-cyan-50/60' : ''
+                              }`}
                             >
                               <div className="flex gap-3">
                                 <div className="w-10 h-10 shrink-0 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center">
@@ -486,9 +802,7 @@ function App() {
 
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-start justify-between gap-2">
-                                    <p className="text-sm font-bold">
-                                      {n.title}
-                                    </p>
+                                    <p className="text-sm font-bold">{n.title}</p>
 
                                     {!n.read && (
                                       <span className="w-2 h-2 rounded-full bg-cyan-500 mt-1 shrink-0" />
@@ -519,9 +833,7 @@ function App() {
                             </div>
                           )
                         })
-
                       ) : (
-
                         <div className="py-12 text-center">
                           <Bell size={35} className="mx-auto text-slate-300" />
                           <p className="font-semibold text-slate-600 mt-3">
@@ -531,7 +843,6 @@ function App() {
                             No notifications available.
                           </p>
                         </div>
-
                       )}
                     </div>
 
@@ -540,50 +851,57 @@ function App() {
                         CivicLens Community Notifications
                       </p>
                     </div>
-
                   </div>
                 )}
               </div>
 
+              {/* User profile */}
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-3 bg-white p-2 pr-4 rounded-xl border">
                   <div className="w-9 h-9 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold">
                     {(authUser.name || 'C').charAt(0).toUpperCase()}
                   </div>
+
                   <div>
                     <p className="text-sm font-semibold">{authUser.name}</p>
-                    <p className="text-xs text-slate-500">Citizen</p>
+                    <p className="text-xs text-slate-500">
+                      {authUser.role === 'admin' ? 'Admin' : 'Citizen'}
+                    </p>
                   </div>
                 </div>
-                <button onClick={handleLogout} title="Logout" aria-label="Logout" className="p-3 bg-white rounded-xl border text-slate-600 hover:text-red-600 hover:bg-red-50 transition">
+
+                <button
+                  onClick={handleLogout}
+                  title="Logout"
+                  aria-label="Logout"
+                  className="p-3 bg-white rounded-xl border text-slate-600 hover:text-red-600 hover:bg-red-50 transition"
+                >
                   <LogOut size={18} />
                 </button>
               </div>
             </div>
           </header>
 
+          {/* Report problem page */}
           {showReport ? (
-
-            <ReportProblem onBack={() => setShowReport(false)} />
-
+            <ReportProblem
+              onBack={() => {
+                setShowReport(false)
+                fetchProblems()
+                fetchDashboardAnalytics()
+              }}
+            />
           ) : active === 'Settings' ? (
-
             <SettingsPage />
-
           ) : active === 'Map View' ? (
-
             <MapView />
-
           ) : active === 'Analytics' ? (
-
             <Analytics />
-
           ) : active === 'Community' ? (
-
             <Community />
-
           ) : active === 'Problems' ? (
 
+            /* Problems page */
             <div className="space-y-6">
               <section className="bg-gradient-to-r from-slate-900 to-cyan-900 text-white rounded-3xl p-7">
                 <p className="text-cyan-300 text-sm font-semibold">
@@ -618,16 +936,46 @@ function App() {
                   />
                 </div>
 
-                <p className="text-sm text-slate-500 mb-4">
-                  Showing {filteredProblems.length} of {problems.length} problems
-                </p>
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+                  <p className="text-sm text-slate-500">
+                    Showing {filteredProblems.length} of {problems.length} problems
+                  </p>
 
-                <ProblemTable data={filteredProblems} />
+                  <button
+                    onClick={fetchProblems}
+                    disabled={problemsLoading}
+                    className="text-sm font-semibold text-cyan-700 disabled:opacity-50"
+                  >
+                    {problemsLoading ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                </div>
+
+                {problemsLoading ? (
+                  <p className="text-center py-10 text-slate-500">
+                    Loading problems...
+                  </p>
+                ) : problemsError ? (
+                  <div className="text-center py-10">
+                    <p className="text-red-600 text-sm mb-3">
+                      {problemsError}
+                    </p>
+
+                    <button
+                      onClick={fetchProblems}
+                      className="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                ) : (
+                  <ProblemTable data={filteredProblems} />
+                )}
               </section>
             </div>
 
           ) : active === 'Dashboard' ? (
 
+            /* Dashboard */
             <>
               <section className="bg-gradient-to-r from-slate-900 to-cyan-900 text-white rounded-3xl p-7 md:p-9 mb-8">
                 <p className="text-cyan-300 text-sm font-medium">
@@ -650,31 +998,99 @@ function App() {
                 </button>
               </section>
 
-              <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
-                {[
-                  { title: 'Total Reports', value: '156', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50' },
-                  { title: 'Active Problems', value: '42', icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50' },
-                  { title: 'Resolved Issues', value: '89', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
-                  { title: 'Under Review', value: '25', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50' },
-                ].map(stat => {
-                  const Icon = stat.icon
+              {/* Live MongoDB dashboard statistics */}
+              <section className="mb-8">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="font-bold text-lg">Community Overview</h3>
+                    <p className="text-sm text-slate-500">
+                      Live statistics from MongoDB
+                    </p>
+                  </div>
 
-                  return (
-                    <div key={stat.title} className="bg-white rounded-2xl p-5 border shadow-sm">
-                      <div className="flex justify-between items-center">
-                        <p className="text-sm text-slate-500">{stat.title}</p>
+                  <button
+                    onClick={fetchDashboardAnalytics}
+                    disabled={analyticsLoading}
+                    className="text-sm font-semibold text-cyan-700 disabled:opacity-50"
+                  >
+                    {analyticsLoading ? 'Refreshing...' : '↻ Refresh Statistics'}
+                  </button>
+                </div>
 
-                        <div className={`${stat.bg} ${stat.color} p-3 rounded-xl`}>
-                          <Icon size={20} />
+                {analyticsError && (
+                  <div className="bg-red-50 text-red-600 rounded-xl p-3 text-sm mb-4">
+                    {analyticsError}
+
+                    <button
+                      onClick={fetchDashboardAnalytics}
+                      disabled={analyticsLoading}
+                      className="font-bold ml-2 underline disabled:opacity-50"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+                  {[
+                    {
+                      title: 'Total Reports',
+                      value: dashboardAnalytics?.totalReports ?? 0,
+                      icon: FileText,
+                      color: 'text-blue-600',
+                      bg: 'bg-blue-50',
+                    },
+                    {
+                      title: 'Active Problems',
+                      value: dashboardAnalytics?.pendingReports ?? 0,
+                      icon: AlertTriangle,
+                      color: 'text-orange-600',
+                      bg: 'bg-orange-50',
+                    },
+                    {
+                      title: 'Resolved Issues',
+                      value: dashboardAnalytics?.resolvedReports ?? 0,
+                      icon: CheckCircle2,
+                      color: 'text-green-600',
+                      bg: 'bg-green-50',
+                    },
+                    {
+                      title: 'Under Review',
+                      value:
+                        dashboardAnalytics?.statusStats?.find(
+                          item => item.status === 'Under Review'
+                        )?.count ?? 0,
+                      icon: Clock,
+                      color: 'text-purple-600',
+                      bg: 'bg-purple-50',
+                    },
+                  ].map(stat => {
+                    const Icon = stat.icon
+
+                    return (
+                      <div
+                        key={stat.title}
+                        className="bg-white rounded-2xl p-5 border shadow-sm"
+                      >
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-slate-500">
+                            {stat.title}
+                          </p>
+
+                          <div className={`${stat.bg} ${stat.color} p-3 rounded-xl`}>
+                            <Icon size={20} />
+                          </div>
                         </div>
-                      </div>
 
-                      <h3 className="text-3xl font-bold mt-4">
-                        {stat.value}
-                      </h3>
-                    </div>
-                  )
-                })}
+                        <h3 className="text-3xl font-bold mt-4">
+                          {analyticsLoading && !dashboardAnalytics
+                            ? '...'
+                            : stat.value}
+                        </h3>
+                      </div>
+                    )
+                  })}
+                </div>
               </section>
 
               <section className="bg-white rounded-2xl border shadow-sm p-5">
@@ -683,7 +1099,6 @@ function App() {
                     <h3 className="text-lg font-bold">
                       Recent Community Problems
                     </h3>
-
                     <p className="text-sm text-slate-500 mt-1">
                       Latest reported infrastructure issues
                     </p>
@@ -697,7 +1112,17 @@ function App() {
                   </button>
                 </div>
 
-                <ProblemTable data={problems.slice(0, 3)} />
+                {problemsLoading ? (
+                  <p className="text-center py-8 text-slate-500">
+                    Loading problems...
+                  </p>
+                ) : problemsError ? (
+                  <p className="text-center py-8 text-red-600">
+                    {problemsError}
+                  </p>
+                ) : (
+                  <ProblemTable data={problems.slice(0, 3)} />
+                )}
               </section>
 
               <footer className="text-center text-xs text-slate-400 mt-8">
@@ -707,6 +1132,7 @@ function App() {
 
           ) : (
 
+            /* Other pages */
             <section className="bg-white rounded-2xl border p-10 text-center">
               <div className="bg-cyan-50 text-cyan-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto">
                 <Settings size={30} />
@@ -727,6 +1153,7 @@ function App() {
             </section>
           )}
 
+          {/* Problem details modal */}
           {selectedProblem && (
             <div className="fixed inset-0 z-[1000] bg-slate-950/50 flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
@@ -734,7 +1161,7 @@ function App() {
                   <h3 className="text-xl font-bold">Problem Details</h3>
 
                   <button onClick={() => setSelectedProblem(null)}>
-                    ✕
+                    <X size={20} />
                   </button>
                 </div>
 
@@ -758,6 +1185,10 @@ function App() {
                   Status: {selectedProblem.status}
                 </p>
 
+                <p className="text-sm mt-2">
+                  Description: {selectedProblem.description}
+                </p>
+
                 <button
                   onClick={() => setSelectedProblem(null)}
                   className="mt-6 w-full bg-cyan-600 text-white py-3 rounded-xl"
@@ -767,7 +1198,6 @@ function App() {
               </div>
             </div>
           )}
-
         </main>
       </div>
     </div>
