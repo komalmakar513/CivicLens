@@ -1,3 +1,5 @@
+const dns = require("node:dns");
+dns.setServers(["1.1.1.1", "8.8.8.8"]);
 
 const express = require("express");
 const cors = require("cors");
@@ -11,23 +13,28 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health check route
 app.get("/", (req, res) => {
-  res.status(200).json({
+  res.json({
     success: true,
     message: "CivicLens API is running!",
   });
 });
 
-// Start server after connecting to MongoDB
+app.use("/api/auth", require("./routes/authRoutes"));
+
 const startServer = async () => {
-  await connectDB();
+  try {
+    await connectDB();
 
-  const PORT = process.env.PORT || 5000;
+    const PORT = process.env.PORT || 5000;
 
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Server startup failed:", error.message);
+    process.exit(1);
+  }
 };
 
 startServer();
