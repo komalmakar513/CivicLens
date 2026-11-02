@@ -1,6 +1,7 @@
 
 const mongoose = require("mongoose");
 const Problem = require("../models/Problem");
+const { broadcastNewProblem } = require("../utils/problemEvents");
 
 // Create a new problem report
 const createProblem = async (req, res) => {
@@ -12,9 +13,9 @@ const createProblem = async (req, res) => {
             severity,
             location,
             coordinates,
+            image,
         } = req.body;
 
-        // Required field validation
         if (
             !title?.trim() ||
             !category ||
@@ -58,6 +59,32 @@ const createProblem = async (req, res) => {
             };
         }
 
+        // Validate image data
+        if (image && typeof image !== "string") {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid image data.",
+            });
+        }
+
+        if (
+            image &&
+            !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(image)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Unsupported image format.",
+            });
+        }
+
+        // Limit image data to approximately 2 MB
+        if (image && Buffer.byteLength(image, "utf8") > 2 * 1024 * 1024) {
+            return res.status(413).json({
+                success: false,
+                message: "Compressed image is too large. Please choose a smaller image.",
+            });
+        }
+
         const problem = await Problem.create({
             title: title.trim(),
             category,
@@ -65,8 +92,15 @@ const createProblem = async (req, res) => {
             severity: severity || "Medium",
             location: location.trim(),
             coordinates: savedCoordinates,
+            image: image || "",
             reportedBy: req.user._id,
         });
+
+        // Populate reporter details for real-time updates
+        await problem.populate("reportedBy", "name email");
+
+        // Broadcast new problem to connected users
+        broadcastNewProblem(problem.toObject());
 
         return res.status(201).json({
             success: true,
@@ -85,7 +119,7 @@ const createProblem = async (req, res) => {
 };
 
 
-// Get all problems with optional filters
+// Get all problems
 const getProblems = async (req, res) => {
     try {
         const { category, severity, status } = req.query;

@@ -70,8 +70,18 @@ function App() {
   const [showReport, setShowReport] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedProblem, setSelectedProblem] = useState(null)
+  const [statusUpdating, setStatusUpdating] = useState(false)
+  const [statusError, setStatusError] = useState('')
+  const [statusSuccess, setStatusSuccess] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+
+  // =========================
+  // LIVE NOTIFICATIONS
+  // Only new SSE events are stored here.
+  // =========================
+
+  const [liveNotifications, setLiveNotifications] = useState([])
 
   // =========================
   // NOTIFICATION PREFERENCES
@@ -98,7 +108,8 @@ function App() {
   })
 
   // =========================
-  // FETCH PROBLEMS FROM MONGODB
+  // FETCH PROBLEMS
+  // Called on initial login and manual refresh.
   // =========================
 
   const fetchProblems = useCallback(async () => {
@@ -186,69 +197,234 @@ function App() {
   }, [authUser, fetchProblems, fetchDashboardAnalytics])
 
   // =========================
-  // AUTOMATIC REPORT REFRESH
+  // SERVER-SENT EVENTS
+  // Listen for newly submitted reports.
+  // No repeated GET requests.
   // =========================
 
   useEffect(() => {
     if (!authUser) return
 
-    const interval = setInterval(() => {
-      fetchProblems()
-    }, 30000)
+    let stopped = false
+    let currentController = null
 
-    return () => clearInterval(interval)
-  }, [authUser, fetchProblems])
+    const connectToEvents = async () => {
+      let retryDelay = 2000
+
+      while (!stopped) {
+        try {
+          const token = localStorage.getItem('civiclens_session')
+
+          if (!token) return
+
+          currentController = new AbortController()
+
+          const response = await fetch(`${API_URL}/api/problems/events`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'text/event-stream',
+            },
+            signal: currentController.signal,
+          })
+
+          if (!response.ok) {
+            throw new Error(`Notification connection failed: ${response.status}`)
+          }
+
+          if (!response.body) {
+            throw new Error('Streaming is not supported by this browser.')
+          }
+
+          retryDelay = 2000
+
+          const reader = response.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+
+          while (!stopped) {
+            const { value, done } = await reader.read()
+
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+            buffer = buffer.replace(/\r\n/g, '\n')
+
+            const events = buffer.split('\n\n')
+            buffer = events.pop() || ''
+
+            for (const eventBlock of events) {
+              if (!eventBlock.trim()) continue
+
+              const lines = eventBlock.split('\n')
+              let eventName = ''
+              let eventData = ''
+
+              for (const line of lines) {
+                if (line.startsWith('event:')) {
+                  eventName = line.slice(6).trim()
+                }
+
+                if (line.startsWith('data:')) {
+                  eventData += line.slice(5).trim()
+                }
+              }
+
+              if (eventName === 'new-problem' && eventData) {
+                try {
+                  const newProblem = JSON.parse(eventData)
+
+                  if (!newProblem._id) continue
+
+                  // Update the problems list without another API request.
+                  setProblems(prev => {
+                    const alreadyExists = prev.some(
+                      problem => String(problem._id) === String(newProblem._id)
+                    )
+
+                    if (alreadyExists) return prev
+
+                    return [newProblem, ...prev]
+                  })
+
+                  // Create a notification only for this new report.
+                  setLiveNotifications(prev => {
+                    const alreadyExists = prev.some(
+                      notification =>
+                        notification.id === String(newProblem._id)
+                    )
+
+                    if (alreadyExists) return prev
+
+                    const id = String(newProblem._id)
+
+                    return [
+                      {
+                        id,
+                        problemId: id,
+                        title: 'New Problem Reported',
+                        message: `${newProblem.title} has been reported at ${newProblem.location}.`,
+                        time: newProblem.createdAt
+                          ? new Date(newProblem.createdAt).toLocaleString()
+                          : 'Just now',
+                        type: 'problem',
+                        createdAt: newProblem.createdAt
+                          ? new Date(newProblem.createdAt).getTime()
+                          : Date.now(),
+                      },
+                      ...prev,
+                    ]
+                  })
+                } catch (error) {
+                  console.error('Could not process new report event:', error)
+                }
+              }
+            }
+          }
+        } catch (error) {
+          if (error.name === 'AbortError' || stopped) {
+            break
+          }
+
+          console.error('Live notification connection error:', error)
+        }
+
+        if (stopped) break
+
+        // Reconnect with increasing delay if connection drops.
+        await new Promise(resolve => {
+          const timeout = setTimeout(resolve, retryDelay)
+
+          currentController = {
+            abort: () => clearTimeout(timeout),
+          }
+        })
+
+        retryDelay = Math.min(retryDelay * 2, 30000)
+      }
+    }
+
+    connectToEvents()
+
+    return () => {
+      stopped = true
+      currentController?.abort?.()
+    }
+  }, [authUser])
 
   // =========================
-  // REAL NOTIFICATIONS
+  // STATUS UPDATE (ADMIN)
   // =========================
 
+  const handleStatusUpdate = async (newStatus) => {
+    if (!selectedProblem?._id || authUser?.role !== 'admin') {
+      return
+    }
+
+    const token = localStorage.getItem('civiclens_session')
+
+    try {
+      setStatusUpdating(true)
+      setStatusError('')
+      setStatusSuccess('')
+
+      const response = await fetch(
+        `${API_URL}/api/problems/${selectedProblem._id}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Could not update problem status.')
+      }
+
+      setProblems(prev =>
+        prev.map(problem =>
+          problem._id === selectedProblem._id
+            ? { ...problem, status: newStatus }
+            : problem
+        )
+      )
+
+      setSelectedProblem(prev => ({
+        ...prev,
+        status: newStatus,
+      }))
+
+      setStatusSuccess('Problem status updated successfully.')
+
+      fetchDashboardAnalytics()
+    } catch (error) {
+      setStatusError(error.message || 'Status update failed.')
+    } finally {
+      setStatusUpdating(false)
+    }
+  }
+
+  // =========================
+  // INITIAL DATA FETCH
+  // =========================
+
+  // Notifications are based only on new SSE events.
   const notifications = useMemo(() => {
-    return problems
-      .filter(problem => problem && problem._id)
-      .map(problem => {
-        const status = problem.status || 'Reported'
-
-        let title = 'New Problem Reported'
-        let message = `${problem.title} has been reported at ${problem.location}.`
-        let type = 'problem'
-
-        if (status === 'Resolved') {
-          title = 'Problem Resolved'
-          message = `${problem.title} at ${problem.location} is marked as resolved.`
-          type = 'resolved'
-        } else if (status === 'In Progress') {
-          title = 'Work In Progress'
-          message = `Work on ${problem.title} at ${problem.location} is in progress.`
-          type = 'update'
-        } else if (status === 'Under Review') {
-          title = 'Problem Under Review'
-          message = `${problem.title} at ${problem.location} is under review.`
-          type = 'update'
-        }
-
-        const id = String(problem._id)
-
-        return {
-          id,
-          problemId: id,
-          title,
-          message,
-          time: problem.createdAt
-            ? new Date(problem.createdAt).toLocaleString()
-            : 'Recently',
-          type,
-          read: readNotifications.includes(id),
-          createdAt: problem.createdAt
-            ? new Date(problem.createdAt).getTime()
-            : 0,
-        }
-      })
+    return liveNotifications
       .filter(notification =>
         !dismissedNotifications.includes(notification.id)
       )
+      .map(notification => ({
+        ...notification,
+        read: readNotifications.includes(notification.id),
+      }))
       .sort((a, b) => b.createdAt - a.createdAt)
-  }, [problems, readNotifications, dismissedNotifications])
+  }, [liveNotifications, readNotifications, dismissedNotifications])
 
   const unreadCount = notifications.filter(n => !n.read).length
 
@@ -396,6 +572,7 @@ function App() {
       setAuthUser(user)
       setAuthPassword('')
       setAuthConfirmPassword('')
+      setLiveNotifications([])
     } catch (error) {
       setAuthError(error.message || 'Something went wrong. Please try again.')
     } finally {
@@ -416,6 +593,7 @@ function App() {
     setProblemsError('')
     setDashboardAnalytics(null)
     setAnalyticsError('')
+    setLiveNotifications([])
     setReadNotifications([])
     setDismissedNotifications([])
     setAuthMode('login')
@@ -448,10 +626,7 @@ function App() {
     setMenuOpen(false)
     setShowNotifications(false)
 
-    if (name === 'Problems' || name === 'Dashboard') {
-      fetchProblems()
-    }
-
+    // No repeated problem fetch while navigating.
     if (name === 'Dashboard') {
       fetchDashboardAnalytics()
     }
@@ -855,10 +1030,7 @@ function App() {
               {/* NOTIFICATIONS */}
               <div className="relative">
                 <button
-                  onClick={() => {
-                    setShowNotifications(!showNotifications)
-                    if (!showNotifications) fetchProblems()
-                  }}
+                  onClick={() => setShowNotifications(!showNotifications)}
                   className="relative p-3 bg-white rounded-xl border hover:bg-slate-50 transition"
                   aria-label="Notifications"
                 >
@@ -1014,8 +1186,6 @@ function App() {
             <ReportProblem
               onBack={() => {
                 setShowReport(false)
-                fetchProblems()
-                fetchDashboardAnalytics()
               }}
             />
           ) : active === 'Settings' ? (
@@ -1025,7 +1195,7 @@ function App() {
           ) : active === 'Analytics' ? (
             <Analytics />
           ) : active === 'Community' ? (
-            <Community />
+            <Community problems={problems} setProblems={setProblems} />
           ) : active === 'Problems' ? (
 
             /* PROBLEMS PAGE */
@@ -1283,7 +1453,8 @@ function App() {
           {/* PROBLEM DETAILS MODAL */}
           {selectedProblem && (
             <div className="fixed inset-0 z-[1000] bg-slate-950/50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
+              <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+
                 <div className="flex justify-between items-center mb-5">
                   <h3 className="text-xl font-bold">Problem Details</h3>
 
@@ -1309,19 +1480,82 @@ function App() {
                 </p>
 
                 <p className="text-sm mt-2">
-                  Status: {selectedProblem.status}
+                  Status: <span className="font-semibold">{selectedProblem.status}</span>
                 </p>
 
                 <p className="text-sm mt-2">
                   Description: {selectedProblem.description}
                 </p>
 
+                {/* UPLOADED EVIDENCE */}
+                {selectedProblem.image && (
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold mb-2">
+                      Uploaded Evidence
+                    </p>
+
+                    <img
+                      src={selectedProblem.image}
+                      alt={`Evidence for ${selectedProblem.title}`}
+                      className="w-full max-h-72 object-contain rounded-xl border border-slate-200 bg-slate-50"
+                    />
+                  </div>
+                )}
+
+                {/* ADMIN STATUS MANAGEMENT */}
+                {authUser?.role === 'admin' && (
+                  <div className="mt-6 border-t pt-5">
+                    <h4 className="font-bold text-base mb-3">
+                      Admin: Update Problem Status
+                    </h4>
+
+                    <label className="block text-sm font-medium mb-2">
+                      Select new status
+                    </label>
+
+                    <select
+                      value={selectedProblem.status || 'Reported'}
+                      onChange={e => handleStatusUpdate(e.target.value)}
+                      disabled={statusUpdating}
+                      className="w-full border border-slate-300 rounded-xl p-3 outline-none focus:border-cyan-500 disabled:opacity-50"
+                    >
+                      <option value="Reported">Reported</option>
+                      <option value="Under Review">Under Review</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Resolved">Resolved</option>
+                    </select>
+
+                    {statusUpdating && (
+                      <p className="text-sm text-cyan-700 mt-2">
+                        Updating status...
+                      </p>
+                    )}
+
+                    {statusError && (
+                      <p className="text-sm text-red-600 mt-2">
+                        {statusError}
+                      </p>
+                    )}
+
+                    {statusSuccess && (
+                      <p className="text-sm text-green-600 mt-2">
+                        {statusSuccess}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <button
-                  onClick={() => setSelectedProblem(null)}
+                  onClick={() => {
+                    setSelectedProblem(null)
+                    setStatusError('')
+                    setStatusSuccess('')
+                  }}
                   className="mt-6 w-full bg-cyan-600 text-white py-3 rounded-xl"
                 >
                   Close
                 </button>
+
               </div>
             </div>
           )}
