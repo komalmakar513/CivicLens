@@ -1,11 +1,10 @@
-
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   LayoutDashboard, MapPin, FileText, BarChart3,
   Users, Settings, Bell, Plus, Search,
   AlertTriangle, CheckCircle2, Clock, Menu, Eye,
   Check, CheckCheck, Trash2, X, LogOut, Mail,
-  LockKeyhole, UserRound
+  LockKeyhole, UserRound, KeyRound
 } from 'lucide-react'
 
 import ReportProblem from './ReportProblem'
@@ -15,6 +14,12 @@ import Community from './Community'
 import SettingsPage from './Settings'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+// Red asterisk shown next to mandatory field labels
+const Required = () => (
+  <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
+)
 
 function App() {
   // =========================
@@ -45,6 +50,17 @@ function App() {
   const [authSuccess, setAuthSuccess] = useState('')
   const [showAuthPassword, setShowAuthPassword] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
+  const [authCode, setAuthCode] = useState('')
+  const [resendWait, setResendWait] = useState(0)
+
+  // Countdown for the "Resend code" button
+  useEffect(() => {
+    if (resendWait <= 0) return
+
+    const timer = setTimeout(() => setResendWait(prev => prev - 1), 1000)
+
+    return () => clearTimeout(timer)
+  }, [resendWait])
 
   // =========================
   // PROBLEMS STATE
@@ -488,6 +504,37 @@ function App() {
   // AUTHENTICATION SUBMIT
   // =========================
 
+  const startSession = (data, email) => {
+    if (!data.token) {
+      throw new Error('JWT token was not received from the server.')
+    }
+
+    const user = data.user || {
+      id: data.id,
+      name: data.name || authName || email.split('@')[0],
+      email: data.email || email,
+      role: data.role || 'citizen',
+    }
+
+    localStorage.setItem('civiclens_session', data.token)
+    localStorage.setItem('civiclens_user', JSON.stringify(user))
+
+    setAuthUser(user)
+    setAuthPassword('')
+    setAuthConfirmPassword('')
+    setAuthCode('')
+    setLiveNotifications([])
+  }
+
+  const goToVerify = (message) => {
+    setAuthMode('verify')
+    setAuthCode('')
+    setAuthPassword('')
+    setAuthConfirmPassword('')
+    setAuthSuccess(message)
+    setResendWait(60)
+  }
+
   const handleAuthSubmit = async (event) => {
     event.preventDefault()
     setAuthError('')
@@ -495,8 +542,47 @@ function App() {
 
     const email = authEmail.trim().toLowerCase()
 
+    // Step 2 of signup: confirm the 6-digit code sent by email
+    if (authMode === 'verify') {
+      if (!/^\d{6}$/.test(authCode.trim())) {
+        setAuthError('Please enter the 6-digit code sent to your email.')
+        return
+      }
+
+      try {
+        setAuthLoading(true)
+
+        const response = await fetch(`${API_URL}/api/auth/verify-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, code: authCode.trim() }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Verification failed.')
+        }
+
+        startSession(data, email)
+      } catch (error) {
+        setAuthError(error.message || 'Something went wrong. Please try again.')
+      } finally {
+        setAuthLoading(false)
+      }
+
+      return
+    }
+
     if (!email || !authPassword) {
       setAuthError('Please enter your email and password.')
+      return
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      setAuthError('Please enter a valid email address.')
       return
     }
 
@@ -544,39 +630,63 @@ function App() {
       const data = await response.json()
 
       if (!response.ok) {
+        if (data.needsVerification) {
+          // Account exists but the email was never verified: send a fresh code.
+          try {
+            await fetch(`${API_URL}/api/auth/resend-code`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ email }),
+            })
+          } catch {
+            // A recent code may still be valid, so continue to the code screen.
+          }
+
+          goToVerify('Your email is not verified yet. Enter the 6-digit code we sent to your email.')
+          return
+        }
+
         throw new Error(data.message || 'Authentication failed.')
       }
 
       if (authMode === 'signup') {
-        setAuthMode('login')
-        setAuthPassword('')
-        setAuthConfirmPassword('')
-        setAuthSuccess('Account created successfully. Please log in.')
+        goToVerify(`We sent a 6-digit code to ${email}. Enter it below to verify your email.`)
         return
       }
 
-      if (!data.token) {
-        throw new Error('JWT token was not received from the server.')
-      }
-
-      const user = data.user || {
-        id: data.id,
-        name: data.name || authName || email.split('@')[0],
-        email: data.email || email,
-        role: data.role || 'citizen',
-      }
-
-      localStorage.setItem('civiclens_session', data.token)
-      localStorage.setItem('civiclens_user', JSON.stringify(user))
-
-      setAuthUser(user)
-      setAuthPassword('')
-      setAuthConfirmPassword('')
-      setLiveNotifications([])
+      startSession(data, email)
     } catch (error) {
       setAuthError(error.message || 'Something went wrong. Please try again.')
     } finally {
       setAuthLoading(false)
+    }
+  }
+
+  const handleResendCode = async () => {
+    setAuthError('')
+    setAuthSuccess('')
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/resend-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: authEmail.trim().toLowerCase() }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not resend the code.')
+      }
+
+      setAuthSuccess('A new code has been sent to your email.')
+      setResendWait(60)
+    } catch (error) {
+      setAuthError(error.message || 'Could not resend the code.')
     }
   }
 
@@ -600,6 +710,7 @@ function App() {
     setAuthEmail('')
     setAuthPassword('')
     setAuthConfirmPassword('')
+    setAuthCode('')
     setAuthError('')
     setAuthSuccess('')
     setShowNotifications(false)
@@ -780,15 +891,22 @@ function App() {
               </p>
 
               <h2 className="text-3xl font-bold text-slate-900 mt-2">
-                {authMode === 'login' ? 'Welcome back' : 'Create your account'}
+                {authMode === 'login'
+                  ? 'Welcome back'
+                  : authMode === 'verify'
+                    ? 'Verify your email'
+                    : 'Create your account'}
               </h2>
 
               <p className="text-slate-500 mt-2">
                 {authMode === 'login'
                   ? 'Log in to continue to your community dashboard.'
-                  : 'Join your community and help make a difference.'}
+                  : authMode === 'verify'
+                    ? 'Enter the 6-digit code we emailed you.'
+                    : 'Join your community and help make a difference.'}
               </p>
 
+              {authMode !== 'verify' && (
               <div className="grid grid-cols-2 bg-slate-100 rounded-xl p-1 mt-8 mb-6">
                 <button
                   type="button"
@@ -822,12 +940,16 @@ function App() {
                   Sign up
                 </button>
               </div>
+              )}
 
-              <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <form
+                onSubmit={handleAuthSubmit}
+                className={`space-y-4 ${authMode === 'verify' ? 'mt-8' : ''}`}
+              >
                 {authMode === 'signup' && (
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">
-                      Full name
+                      Full name<Required />
                     </span>
 
                     <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
@@ -838,14 +960,17 @@ function App() {
                         placeholder="Enter your full name"
                         className="w-full outline-none text-sm"
                         autoComplete="name"
+                        required
                       />
                     </div>
                   </label>
                 )}
 
+                {authMode !== 'verify' && (
+                  <>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    Email address
+                    Email address<Required />
                   </span>
 
                   <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
@@ -864,7 +989,7 @@ function App() {
 
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">
-                    Password
+                    Password<Required />
                   </span>
 
                   <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
@@ -888,11 +1013,13 @@ function App() {
                     </button>
                   </div>
                 </label>
+                  </>
+                )}
 
                 {authMode === 'signup' && (
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">
-                      Confirm password
+                      Confirm password<Required />
                     </span>
 
                     <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
@@ -910,8 +1037,30 @@ function App() {
                   </label>
                 )}
 
+                {authMode === 'verify' && (
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">
+                      Verification code<Required />
+                    </span>
+
+                    <div className="mt-1.5 flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-cyan-500">
+                      <KeyRound size={18} className="text-slate-400" />
+                      <input
+                        value={authCode}
+                        onChange={e => setAuthCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="6-digit code"
+                        inputMode="numeric"
+                        maxLength={6}
+                        className="w-full outline-none text-sm tracking-widest"
+                        autoComplete="one-time-code"
+                        required
+                      />
+                    </div>
+                  </label>
+                )}
+
                 {authError && (
-                  <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg p-3">
+                  <p role="alert\" className="text-sm text-red-600 bg-red-50 rounded-lg p-3">
                     {authError}
                   </p>
                 )}
@@ -931,9 +1080,43 @@ function App() {
                     ? 'Please wait...'
                     : authMode === 'login'
                       ? 'Login to CivicLens'
-                      : 'Create Account'}
+                      : authMode === 'verify'
+                        ? 'Verify Email'
+                        : 'Create Account'}
                 </button>
+
+                {authMode === 'verify' && (
+                  <div className="flex items-center justify-between text-sm">
+                    <button
+                      type="button"
+                      onClick={handleResendCode}
+                      disabled={resendWait > 0}
+                      className="font-semibold text-cyan-700 disabled:text-slate-400"
+                    >
+                      {resendWait > 0 ? `Resend code in ${resendWait}s` : 'Resend code'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('login')
+                        setAuthError('')
+                        setAuthSuccess('')
+                        setAuthCode('')
+                      }}
+                      className="text-slate-500"
+                    >
+                      Back to login
+                    </button>
+                  </div>
+                )}
               </form>
+
+              {authMode !== 'verify' && (
+                <p className="text-xs text-slate-400 mt-4">
+                  <span className="text-red-500">*</span> Required field
+                </p>
+              )}
 
               <p className="text-xs text-slate-400 text-center mt-6">
                 By continuing, you agree to use CivicLens respectfully and responsibly.

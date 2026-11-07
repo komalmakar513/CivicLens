@@ -1,4 +1,3 @@
-
 import { useState } from 'react'
 import {
   MapPin,
@@ -12,6 +11,11 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 const MAX_FILE_SIZE = 10 * 1024 * 1024
+
+// Red asterisk shown next to mandatory field labels
+const Required = () => (
+  <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
+)
 
 const initialForm = {
   title: '',
@@ -292,10 +296,14 @@ function ReportProblem({ onBack }) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5 mt-7">
+        <p className="text-xs text-slate-400 mt-5">
+          <span className="text-red-500">*</span> Required field
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-5 mt-4">
           <div>
             <label className="block text-sm font-semibold mb-2">
-              Problem Title
+              Problem Title<Required />
             </label>
             <input
               name="title"
@@ -310,7 +318,7 @@ function ReportProblem({ onBack }) {
 
           <div>
             <label className="block text-sm font-semibold mb-2">
-              Category
+              Category<Required />
             </label>
             <select
               name="category"
@@ -332,7 +340,7 @@ function ReportProblem({ onBack }) {
 
           <div>
             <label className="block text-sm font-semibold mb-2">
-              Description
+              Description<Required />
             </label>
             <textarea
               name="description"
@@ -364,7 +372,7 @@ function ReportProblem({ onBack }) {
 
           <div>
             <label className="block text-sm font-semibold mb-2">
-              Problem Location / Address
+              Problem Location / Address<Required />
             </label>
 
             <div className="relative">
