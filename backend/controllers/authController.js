@@ -39,7 +39,14 @@ const issueVerificationCode = async (user) => {
   user.verificationSentAt = new Date();
   await user.save();
 
-  await sendVerificationEmail(user.email, user.name, code);
+  try {
+    await sendVerificationEmail(user.email, user.name, code);
+  } catch (mailError) {
+    // Email failed: do not block the next attempt with the cooldown
+    user.verificationSentAt = undefined;
+    await user.save();
+    throw mailError;
+  }
 };
 
 // REGISTER USER
