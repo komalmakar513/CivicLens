@@ -28,6 +28,33 @@ const userSchema = new mongoose.Schema(
       enum: ["citizen", "admin"],
       default: "citizen",
     },
+
+    // Email verification (OTP sent over SMTP)
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    verificationCodeHash: {
+      type: String,
+      select: false,
+    },
+
+    verificationExpires: {
+      type: Date,
+      select: false,
+    },
+
+    verificationAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+
+    verificationSentAt: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,
